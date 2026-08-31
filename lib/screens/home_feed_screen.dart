@@ -377,7 +377,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   }
 
   @override
-  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Do NOT refresh on initial build while _isLoading is true
@@ -389,6 +388,188 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
       _lastRefreshTime = now;
       _refreshContinueWatching();
     }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh continue watching when app comes back to foreground
+      _refreshContinueWatching();
+    }
+  }
+
+  Future<void> _refreshContinueWatching() async {
+    try {
+      print('🔄 Refreshing continue watching...');
+      final continueWatching = await _homeApi.getContinueWatching();
+      print('📊 Got ${continueWatching.length} continue watching projects');
+      if (mounted) {
+        setState(() {
+          _continueWatching = continueWatching;
+          _lastRefreshTime = DateTime.now();
+        });
+        print(
+            '✅ Continue watching updated in UI: ${_continueWatching.length} projects');
+      } else {
+        print('⚠️ Widget not mounted, skipping setState');
+      }
+    } catch (e, stackTrace) {
+      print('❌ Error refreshing continue watching: $e');
+      print('Stack trace: $stackTrace');
+      // Silently fail - don't show error for background refresh
+    }
+  }
+
+  // Public method to refresh continue watching (can be called from MainScreen)
+  void refreshContinueWatching() {
+    _refreshContinueWatching();
+  }
+
+  void _showWelcomeDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.7,
+                          minWidth: double.infinity,
+                        ),
+                        child: Image.asset(
+                          'assets/images/welcome_promo.jpg',
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                        ),
+                      ),
+                      Positioned(
+                        top: 16,
+                        right: 16,
+                        child: GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 40,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      Navigator.of(context).pop();
+                      final Uri url = Uri.parse('https://orientationapps.com/checkout');
+                      try {
+                        if (await canLaunchUrl(url)) {
+                          await launchUrl(url, mode: LaunchMode.externalApplication);
+                        }
+                      } catch (e) {
+                        print('Error launching URL: $e');
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: brandRed,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      'Watch more orientation',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _loadUserName() async {
+    final isLoggedIn = await _authApi.isLoggedIn();
+    if (!mounted) return;
+
+    if (!isLoggedIn) {
+      setState(() {
+        _userName = 'Guest';
+      });
+      return;
+    }
+
+    // User is logged in, load user info
+    final userInfo = await _authApi.getStoredUserInfo();
+    if (!mounted) return;
+
+    setState(() {
+      // Use firstName + lastName if available, otherwise fallback to username
+      final firstName = userInfo['firstName'] ?? '';
+      final lastName = userInfo['lastName'] ?? '';
+      if (firstName.isNotEmpty || lastName.isNotEmpty) {
+        _userName = '$firstName $lastName'.trim();
+      } else {
+        _userName = userInfo['username'] ?? 'User';
+      }
+    });
+
+    // Fetch fresh user profile in background
+    try {
+      final freshProfile = await _authApi.getUserProfile();
+      if (!mounted) return;
+      setState(() {
+        final firstName = freshProfile['firstName'] ?? '';
+        final lastName = freshProfile['lastName'] ?? '';
+        final username = freshProfile['username'] ?? '';
+        if (firstName.isNotEmpty || lastName.isNotEmpty) {
+          _userName = '$firstName $lastName'.trim();
+        } else if (username.isNotEmpty) {
+          _userName = username;
+        } else {
+          _userName = 'User';
+        }
+      });
+    } catch (e) {
+      print('Error fetching fresh user profile for greeting: $e');
+    }
+  }
+
+  // Public method to refresh user name (called from MainScreen)
+  void refreshUserName() {
+    _loadUserName();
   }
 
   Future<void> _loadData() async {
