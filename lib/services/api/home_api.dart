@@ -29,9 +29,9 @@ class HomeApi {
     }
     
     try {
-      // Use the correct endpoint: GET /projects/featured?limit=
-      print('📡 Calling GET /projects/featured?limit=50...');
-      final response = await _dioClient.dio.get('/projects/featured', queryParameters: {'limit': '50'});
+      // Use the correct endpoint: GET /projects/featured?limit=3
+      print('📡 Calling GET /projects/featured?limit=3...');
+      final response = await _dioClient.dio.get('/projects/featured', queryParameters: {'limit': '3'});
       print('📡 Response status: ${response.statusCode}');
       print('📡 Response data type: ${response.data.runtimeType}');
       
@@ -168,8 +168,21 @@ class HomeApi {
     }
   }
 
+  Future<List<ProjectModel>>? _continueWatchingInFlight;
+
   /// Uses ProjectApi.getContinueWatchingProjects (backend watch-history + local fallback)
-  Future<List<ProjectModel>> getContinueWatching() async {
+  Future<List<ProjectModel>> getContinueWatching() {
+    if (_continueWatchingInFlight != null) {
+      print('⚡ Coalescing in-flight GET continue-watching request in HomeApi');
+      return _continueWatchingInFlight!;
+    }
+    _continueWatchingInFlight = _fetchContinueWatching().whenComplete(() {
+      _continueWatchingInFlight = null;
+    });
+    return _continueWatchingInFlight!;
+  }
+
+  Future<List<ProjectModel>> _fetchContinueWatching() async {
     try {
       print('🏠 HomeApi: Fetching continue watching...');
       final projects = await _projectApi.getContinueWatchingProjects();
@@ -272,8 +285,8 @@ class HomeApi {
     }
     
     try {
-      print('📡 Fetching upcoming projects...');
-      final response = await _dioClient.dio.get('/projects/upcoming', queryParameters: {'limit': '50'});
+      print('📡 Fetching upcoming projects (limit=5)...');
+      final response = await _dioClient.dio.get('/projects/upcoming', queryParameters: {'limit': '5'});
       List<dynamic> list;
       final responseData = response.data;
       if (responseData is List) {

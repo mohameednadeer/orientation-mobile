@@ -276,10 +276,22 @@ class AuthApi {
     }
   }
 
-  /// Get user profile. Tries GET /auth/profile; on failure returns cached
-  /// values from SharedPreferences (from login/register). Backend may not
-  /// expose GET /auth/profile.
-  Future<Map<String, String?>> getUserProfile() async {
+  static Future<Map<String, String?>>? _getUserProfileInFlight;
+
+  /// Get user profile. Tries GET /users/profile; on failure returns cached
+  /// values from SharedPreferences (from login/register).
+  Future<Map<String, String?>> getUserProfile() {
+    if (_getUserProfileInFlight != null) {
+      print('⚡ Coalescing in-flight GET /users/profile request');
+      return _getUserProfileInFlight!;
+    }
+    _getUserProfileInFlight = _fetchUserProfile().whenComplete(() {
+      _getUserProfileInFlight = null;
+    });
+    return _getUserProfileInFlight!;
+  }
+
+  Future<Map<String, String?>> _fetchUserProfile() async {
     try {
       final response = await _dioClient.dio.get('/users/profile');
       final responseData = response.data;

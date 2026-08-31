@@ -76,21 +76,27 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   List<ProjectModel> _continueWatching = [];
   List<ProjectModel> _top10Projects = [];
   List<ProjectSummary> _freeProjects = [];
-  bool _isFreeProjectsLoading = true;
+  bool _isFreeProjectsLoading = false;
   String? _freeProjectsError;
-  List<ProjectModel> _northCoastProjects = [];
   List<ProjectModel> _newCairoProjects = [];
   List<ProjectModel> _octoberProjects = [];
   List<ProjectModel> _upcomingProjects = [];
   List<DeveloperModel> _developers = [];
   List<AreaModel> _areas = [];
 
+  // Section lazy loading flags (Viewport-based)
+  bool _hasLoadedFreeProjects = false;
+  bool _hasLoadedTop10 = false;
+  bool _hasLoadedNewCairo = false;
+  bool _hasLoadedOctober = false;
+  bool _hasLoadedUpcoming = false;
+  bool _hasLoadedAreas = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _featuredController.addListener(_onFeaturedScroll);
-    _scrollController.addListener(_onScroll);
     // Load data asynchronously to avoid blocking UI
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
@@ -123,29 +129,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
       });
     });
     // Video will be initialized after loading data (in _loadData)
-  }
-
-  void _onScroll() {
-    // Lazy load area projects when user scrolls near those sections
-    final position = _scrollController.position;
-    if (!position.hasContentDimensions) return;
-
-    // Calculate approximate scroll position for area sections
-    // This is a simple heuristic - adjust based on your actual layout
-    final scrollOffset = position.pixels;
-
-    // Load North Coast projects when scrolling past ~2000px
-    if (scrollOffset > 2000 && _northCoastProjects.isEmpty) {
-      _loadAreaProjectsIfNeeded('North Coast');
-    }
-    // Load New Cairo projects when scrolling past ~3000px
-    if (scrollOffset > 3000 && _newCairoProjects.isEmpty) {
-      _loadAreaProjectsIfNeeded('New Cairo');
-    }
-    // Load October projects when scrolling past ~4000px
-    if (scrollOffset > 4000 && _octoberProjects.isEmpty) {
-      _loadAreaProjectsIfNeeded('October');
-    }
   }
 
   void _onFeaturedScroll() {
@@ -394,9 +377,12 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   }
 
   @override
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Refresh continue watching when screen becomes visible again (with debounce)
+    // Do NOT refresh on initial build while _isLoading is true
+    if (_isLoading) return;
+
     final now = DateTime.now();
     if (_lastRefreshTime == null ||
         now.difference(_lastRefreshTime!).inSeconds > 2) {
@@ -405,195 +391,12 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     }
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      // Refresh continue watching when app comes back to foreground
-      _refreshContinueWatching();
-    }
-  }
-
-  Future<void> _refreshContinueWatching() async {
-    try {
-      print('🔄 Refreshing continue watching...');
-      final continueWatching = await _homeApi.getContinueWatching();
-      print('📊 Got ${continueWatching.length} continue watching projects');
-      if (mounted) {
-        setState(() {
-          _continueWatching = continueWatching;
-          _lastRefreshTime = DateTime.now();
-        });
-        print(
-            '✅ Continue watching updated in UI: ${_continueWatching.length} projects');
-      } else {
-        print('⚠️ Widget not mounted, skipping setState');
-      }
-    } catch (e, stackTrace) {
-      print('❌ Error refreshing continue watching: $e');
-      print('Stack trace: $stackTrace');
-      // Silently fail - don't show error for background refresh
-    }
-  }
-
-  // Public method to refresh continue watching (can be called from MainScreen)
-  void refreshContinueWatching() {
-    _refreshContinueWatching();
-  }
-
-  void _showWelcomeDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxHeight: MediaQuery.of(context).size.height * 0.7,
-                          minWidth: double.infinity,
-                        ),
-                        child: Image.asset(
-                          'assets/images/welcome_promo.jpg',
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                        ),
-                      ),
-                      Positioned(
-                        top: 16,
-                        right: 16,
-                        child: GestureDetector(
-                          onTap: () => Navigator.of(context).pop(),
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.5),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.close,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 40,
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      Navigator.of(context).pop();
-                      final Uri url = Uri.parse('https://orientationapps.com/checkout');
-                      try {
-                        if (await canLaunchUrl(url)) {
-                          await launchUrl(url, mode: LaunchMode.externalApplication);
-                        }
-                      } catch (e) {
-                        print('Error launching URL: $e');
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: brandRed,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: const Text(
-                      'Watch more orientation',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // Test method to add sample progress (for debugging)
-  Future<void> _loadUserName() async {
-    final isLoggedIn = await _authApi.isLoggedIn();
-    if (!mounted) return;
-
-    if (!isLoggedIn) {
-      setState(() {
-        _userName = 'Guest';
-      });
-      return;
-    }
-
-    // User is logged in, load user info
-    final userInfo = await _authApi.getStoredUserInfo();
-    if (!mounted) return;
-
-    setState(() {
-      // Use firstName + lastName if available, otherwise fallback to username
-      final firstName = userInfo['firstName'] ?? '';
-      final lastName = userInfo['lastName'] ?? '';
-      if (firstName.isNotEmpty || lastName.isNotEmpty) {
-        _userName = '$firstName $lastName'.trim();
-      } else {
-        _userName = userInfo['username'] ?? 'User';
-      }
-    });
-
-    // Fetch fresh user profile in background
-    try {
-      final freshProfile = await _authApi.getUserProfile();
-      if (!mounted) return;
-      setState(() {
-        final firstName = freshProfile['firstName'] ?? '';
-        final lastName = freshProfile['lastName'] ?? '';
-        final username = freshProfile['username'] ?? '';
-        if (firstName.isNotEmpty || lastName.isNotEmpty) {
-          _userName = '$firstName $lastName'.trim();
-        } else if (username.isNotEmpty) {
-          _userName = username;
-        } else {
-          _userName = 'User';
-        }
-      });
-    } catch (e) {
-      print('Error fetching fresh user profile for greeting: $e');
-    }
-  }
-
-  // Public method to refresh user name (called from MainScreen)
-  void refreshUserName() {
-    _loadUserName();
-  }
-
   Future<void> _loadData() async {
     print('🔄 Starting _loadData()...');
     try {
-      // Priority 1: Load essential data first (visible immediately)
-      print('📡 Loading essential data (Priority 1)...');
-      final essentialResults = await Future.wait([
+      // Fetch ONLY essential top-of-page data
+      print('📡 Fetching essential home data (Featured [3], Latest [10], Continue Watching)...');
+      final results = await Future.wait([
         _homeApi.getFeaturedProjects(useCache: true).catchError((e) {
           print('Error loading featured projects: $e');
           return <ProjectModel>[];
@@ -608,17 +411,14 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
         }),
       ]);
 
-      // Update UI with essential data first
       if (mounted) {
-        final allFeatured = essentialResults[0] as List<ProjectModel>;
-        // Map isFeatured to true for all items from getFeaturedProjects
+        final allFeatured = results[0] as List<ProjectModel>;
         final featuredOnly = allFeatured.map((p) => p.copyWith(isFeatured: true)).toList();
-        final latest = essentialResults[1] as List<ProjectModel>;
-        final continueWatching = essentialResults[2] as List<ProjectModel>;
+        final latest = results[1] as List<ProjectModel>;
+        final continueWatching = results[2] as List<ProjectModel>;
 
-        print('📊 Data received:');
-        print(
-            '   Featured (all): ${allFeatured.length}, Featured (filtered): ${featuredOnly.length}');
+        print('📊 Essential data received:');
+        print('   Featured: ${featuredOnly.length}');
         print('   Latest: ${latest.length}');
         print('   Continue Watching: ${continueWatching.length}');
 
@@ -626,47 +426,17 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
           _featuredProjects = featuredOnly;
           _latestProjects = latest;
           _continueWatching = continueWatching;
-          _isLoading = false; // Show UI immediately
-        });
-        print(
-            '✅ Essential data loaded and UI updated. Featured: ${_featuredProjects.length}, Latest: ${_latestProjects.length}, Continue: ${_continueWatching.length}');
-        _initializeVideo(); // Initialize video with featured projects
-
-        // Fetch Free projects from NestJS backend in background (non-blocking)
-        ProjectService.getFreeProjects().then((freeProj) {
-          if (mounted) {
-            setState(() {
-              _freeProjects = freeProj;
-              _isFreeProjectsLoading = false;
-              _freeProjectsError = null;
-            });
-            print('✅ Free projects loaded: ${_freeProjects.length}');
-          }
-        }).catchError((e) {
-          print('❌ Error loading free projects: $e');
-          if (mounted) {
-            setState(() {
-              _isFreeProjectsLoading = false;
-              _freeProjectsError = e.toString();
-            });
-          }
+          _isLoading = false;
         });
 
-        // Cache home content in background (non-blocking)
-        // Combines all project lists for caching
-        final allProjects = <ProjectModel>[
+        _initializeVideo();
+
+        _cacheService.cacheHomeContent([
           ...featuredOnly,
           ...latest,
           ...continueWatching,
-        ];
-        _cacheService.cacheHomeContent(allProjects);
-      } else {
-        print('⚠️ Widget not mounted, skipping setState');
+        ]);
       }
-
-      // Priority 2: Load secondary data in background (lazy load)
-      print('📡 Loading secondary data (Priority 2 - background)...');
-      _loadSecondaryData();
     } catch (e) {
       print('❌ Unexpected error in _loadData: $e');
       if (mounted) {
@@ -677,76 +447,124 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     }
   }
 
-  Future<void> _loadSecondaryData() async {
+  // Viewport-based lazy loading methods for deferred sections
+  Future<void> _loadFreeProjectsLazy() async {
+    if (_hasLoadedFreeProjects) return;
+    _hasLoadedFreeProjects = true;
+    setState(() => _isFreeProjectsLoading = true);
     try {
-      // Load secondary data in background (not blocking UI)
-      final results = await Future.wait([
-        _homeApi.getTop10Projects(useCache: true).catchError((e) {
-          print('Error loading top 10 projects: $e');
-          return <ProjectModel>[];
-        }),
-        _homeApi.getUpcomingProjects(useCache: true).catchError((e) {
-          print('Error loading upcoming projects: $e');
-          return <ProjectModel>[];
-        }),
-        _homeApi.getDevelopers().catchError((e) {
-          print('Error loading developers: $e');
-          return <DeveloperModel>[];
-        }),
-        _homeApi.getAreas().catchError((e) {
-          print('Error loading areas: $e');
-          return <AreaModel>[];
-        }),
-      ]);
-
+      print('📡 Lazy loading Free projects...');
+      final freeProj = await ProjectService.getFreeProjects();
       if (mounted) {
         setState(() {
-          _top10Projects = results[0] as List<ProjectModel>;
-          _upcomingProjects = results[1] as List<ProjectModel>;
-          _developers = results[2] as List<DeveloperModel>;
-          _areas = results[3] as List<AreaModel>;
+          _freeProjects = freeProj;
+          _isFreeProjectsLoading = false;
+          _freeProjectsError = null;
         });
-        print('✅ Secondary data loaded');
+        print('✅ Free projects loaded: ${_freeProjects.length}');
       }
-
-      // Priority 3: Load area-specific projects immediately (not lazy)
-      print('📡 Loading area projects...');
-      await Future.wait([
-        _loadAreaProjectsIfNeeded('North Coast'),
-        _loadAreaProjectsIfNeeded('New Cairo'),
-        _loadAreaProjectsIfNeeded('October'),
-      ]);
-      print('✅ Area projects loaded');
     } catch (e) {
-      print('❌ Error loading secondary data: $e');
+      print('❌ Error loading free projects: $e');
+      if (mounted) {
+        setState(() {
+          _isFreeProjectsLoading = false;
+          _freeProjectsError = e.toString();
+        });
+      }
     }
   }
 
-  // Lazy load area projects when user scrolls to that section
-  Future<void> _loadAreaProjectsIfNeeded(String area) async {
-    // Check if already loaded
-    if (area == 'North Coast' && _northCoastProjects.isNotEmpty) return;
-    if (area == 'New Cairo' && _newCairoProjects.isNotEmpty) return;
-    if (area == 'October' && _octoberProjects.isNotEmpty) return;
-
+  Future<void> _loadTop10Lazy() async {
+    if (_hasLoadedTop10) return;
+    _hasLoadedTop10 = true;
     try {
-      print('📡 Lazy loading projects for area: $area');
-      final projects = await _homeApi.getProjectsByArea(area, useCache: true);
+      print('📡 Lazy loading Top 10 projects...');
+      final projects = await _homeApi.getTop10Projects(useCache: true);
       if (mounted) {
-        setState(() {
-          if (area == 'North Coast') {
-            _northCoastProjects = projects;
-          } else if (area == 'New Cairo') {
-            _newCairoProjects = projects;
-          } else if (area == 'October') {
-            _octoberProjects = projects;
-          }
-        });
-        print('✅ Loaded ${projects.length} projects for $area');
+        setState(() => _top10Projects = projects);
+        print('✅ Top 10 loaded: ${projects.length}');
       }
     } catch (e) {
-      print('❌ Error loading projects for $area: $e');
+      print('❌ Error loading top 10 projects: $e');
     }
+  }
+
+  Future<void> _loadNewCairoLazy() async {
+    if (_hasLoadedNewCairo) return;
+    _hasLoadedNewCairo = true;
+    try {
+      print('📡 Lazy loading New Cairo projects...');
+      final projects = await _homeApi.getProjectsByArea('New Cairo', useCache: true);
+      if (mounted) {
+        setState(() => _newCairoProjects = projects);
+        print('✅ New Cairo projects loaded: ${projects.length}');
+      }
+    } catch (e) {
+      print('❌ Error loading New Cairo projects: $e');
+    }
+  }
+
+  Future<void> _loadOctoberLazy() async {
+    if (_hasLoadedOctober) return;
+    _hasLoadedOctober = true;
+    try {
+      print('📡 Lazy loading October projects...');
+      final projects = await _homeApi.getProjectsByArea('October', useCache: true);
+      if (mounted) {
+        setState(() => _octoberProjects = projects);
+        print('✅ October projects loaded: ${projects.length}');
+      }
+    } catch (e) {
+      print('❌ Error loading October projects: $e');
+    }
+  }
+
+  Future<void> _loadUpcomingLazy() async {
+    if (_hasLoadedUpcoming) return;
+    _hasLoadedUpcoming = true;
+    try {
+      print('📡 Lazy loading Upcoming projects...');
+      final projects = await _homeApi.getUpcomingProjects(useCache: true);
+      if (mounted) {
+        setState(() => _upcomingProjects = projects);
+        print('✅ Upcoming projects loaded: ${projects.length}');
+      }
+    } catch (e) {
+      print('❌ Error loading upcoming projects: $e');
+    }
+  }
+
+  Future<void> _loadAreasLazy() async {
+    if (_hasLoadedAreas) return;
+    _hasLoadedAreas = true;
+    try {
+      print('📡 Lazy loading developers & areas...');
+      final results = await Future.wait([
+        _homeApi.getDevelopers().catchError((e) => <DeveloperModel>[]),
+        _homeApi.getAreas().catchError((e) => <AreaModel>[]),
+      ]);
+      if (mounted) {
+        setState(() {
+          _developers = results[0] as List<DeveloperModel>;
+          _areas = results[1] as List<AreaModel>;
+        });
+        print('✅ Developers & areas loaded');
+      }
+    } catch (e) {
+      print('❌ Error loading developers/areas: $e');
+    }
+  }
+
+  Widget _buildHorizontalSkeletonList({bool isLarge = false}) {
+    return SizedBox(
+      height: isLarge ? 280 : 150,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: 4,
+        itemBuilder: (context, index) => SkeletonProjectCard(isLarge: isLarge),
+      ),
+    );
   }
 
   // _videoListener is now handled by _videoListenerForIndex
@@ -829,7 +647,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
           SliverToBoxAdapter(
             child: _buildPageIndicator(),
           ),
-          // Sections
+          // Essential: The latest for us
           SliverToBoxAdapter(
             child: _buildSection(
               'The latest for us',
@@ -844,29 +662,42 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                   ),
                 );
               },
-              child: _buildHorizontalProjectList(),
+              child: _latestProjects.isNotEmpty
+                  ? _buildHorizontalProjectList()
+                  : _buildHorizontalSkeletonList(),
             ),
           ),
+          // Free projects (Lazy Loaded)
           SliverToBoxAdapter(
-            child: _buildSection(
-              'Free projects',
-              onViewAll: () async {
-                final isAuth = await AuthHelper.requireAuth(context);
-                if (!isAuth) return;
-
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ProjectsListScreen(
-                      title: 'Free projects',
-                    ),
-                  ),
-                );
+            child: VisibilityDetector(
+              key: const Key('section_free_projects'),
+              onVisibilityChanged: (info) {
+                if (info.visibleFraction > 0.1 && !_hasLoadedFreeProjects) {
+                  _loadFreeProjectsLazy();
+                }
               },
-              child: _buildFreeProjectsList(),
+              child: _buildSection(
+                'Free projects',
+                onViewAll: () async {
+                  final isAuth = await AuthHelper.requireAuth(context);
+                  if (!isAuth) return;
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ProjectsListScreen(
+                        title: 'Free projects',
+                      ),
+                    ),
+                  );
+                },
+                child: _hasLoadedFreeProjects && !_isFreeProjectsLoading
+                    ? _buildFreeProjectsList()
+                    : _buildHorizontalSkeletonList(),
+              ),
             ),
           ),
-          // Only show "Continue watching" section if there are videos or still loading
+          // Continue watching section
           if (_continueWatching.isNotEmpty || _isLoading)
             SliverToBoxAdapter(
               child: _buildSection(
@@ -882,107 +713,142 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                     ),
                   );
                 },
-                child: _buildContinueWatchingList(),
+                child: _continueWatching.isNotEmpty
+                    ? _buildContinueWatchingList()
+                    : _buildHorizontalSkeletonList(isLarge: true),
               ),
             ),
+          // Top 10 (Lazy Loaded)
           SliverToBoxAdapter(
-            child: _buildSection(
-              'Top 10',
-              onViewAll: () async {
-                final isAuth = await AuthHelper.requireAuth(context);
-                if (!isAuth) return;
-
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const Top10Screen(),
-                  ),
-                );
+            child: VisibilityDetector(
+              key: const Key('section_top10'),
+              onVisibilityChanged: (info) {
+                if (info.visibleFraction > 0.1 && !_hasLoadedTop10) {
+                  _loadTop10Lazy();
+                }
               },
-              child: _buildTop10List(),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: _buildSection(
-              'Projects in Northcoast',
-              onViewAll: () async {
-                final isAuth = await AuthHelper.requireAuth(context);
-                if (!isAuth) return;
+              child: _buildSection(
+                'Top 10',
+                onViewAll: () async {
+                  final isAuth = await AuthHelper.requireAuth(context);
+                  if (!isAuth) return;
 
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ProjectsListScreen(
-                      title: 'Projects in Northcoast',
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const Top10Screen(),
                     ),
-                  ),
-                );
-              },
-              child: _buildNorthcoastProjects(),
+                  );
+                },
+                child: _top10Projects.isNotEmpty
+                    ? _buildTop10List()
+                    : _buildHorizontalSkeletonList(),
+              ),
             ),
           ),
+          // Projects in New Cairo (Lazy Loaded)
           SliverToBoxAdapter(
-            child: _buildSection(
-              'Projects in New Cairo',
-              onViewAll: () async {
-                final isAuth = await AuthHelper.requireAuth(context);
-                if (!isAuth) return;
-
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ProjectsListScreen(
-                      title: 'Projects in New Cairo',
-                    ),
-                  ),
-                );
+            child: VisibilityDetector(
+              key: const Key('section_new_cairo'),
+              onVisibilityChanged: (info) {
+                if (info.visibleFraction > 0.1 && !_hasLoadedNewCairo) {
+                  _loadNewCairoLazy();
+                }
               },
-              child: _buildNewCairoProjects(),
+              child: _buildSection(
+                'Projects in New Cairo',
+                onViewAll: () async {
+                  final isAuth = await AuthHelper.requireAuth(context);
+                  if (!isAuth) return;
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ProjectsListScreen(
+                        title: 'Projects in New Cairo',
+                      ),
+                    ),
+                  );
+                },
+                child: _newCairoProjects.isNotEmpty
+                    ? _buildNewCairoProjects()
+                    : _buildHorizontalSkeletonList(),
+              ),
             ),
           ),
+          // Projects in October (Lazy Loaded)
           SliverToBoxAdapter(
-            child: _buildSection(
-              'Projects in October',
-              onViewAll: () async {
-                final isAuth = await AuthHelper.requireAuth(context);
-                if (!isAuth) return;
-
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ProjectsListScreen(
-                      title: 'Projects in October',
-                    ),
-                  ),
-                );
+            child: VisibilityDetector(
+              key: const Key('section_october'),
+              onVisibilityChanged: (info) {
+                if (info.visibleFraction > 0.1 && !_hasLoadedOctober) {
+                  _loadOctoberLazy();
+                }
               },
-              child: _buildOctoberProjects(),
+              child: _buildSection(
+                'Projects in October',
+                onViewAll: () async {
+                  final isAuth = await AuthHelper.requireAuth(context);
+                  if (!isAuth) return;
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ProjectsListScreen(
+                        title: 'Projects in October',
+                      ),
+                    ),
+                  );
+                },
+                child: _octoberProjects.isNotEmpty
+                    ? _buildOctoberProjects()
+                    : _buildHorizontalSkeletonList(),
+              ),
             ),
           ),
+          // Upcoming Projects (Lazy Loaded)
           SliverToBoxAdapter(
             key: _upcomingSectionKey,
-            child: _buildSection(
-              'Upcoming Projects',
-              onViewAll: null,
-              child: _buildUpcomingProjectsList(),
+            child: VisibilityDetector(
+              key: const Key('section_upcoming'),
+              onVisibilityChanged: (info) {
+                if (info.visibleFraction > 0.1 && !_hasLoadedUpcoming) {
+                  _loadUpcomingLazy();
+                }
+              },
+              child: _buildSection(
+                'Upcoming Projects',
+                onViewAll: null,
+                child: _upcomingProjects.isNotEmpty
+                    ? _buildUpcomingProjectsList()
+                    : _buildHorizontalSkeletonList(),
+              ),
             ),
           ),
-
+          // Discover Areas (Lazy Loaded)
           SliverToBoxAdapter(
-            child: _buildSection(
-              'Discover Areas',
-              onViewAll: () async {
-                final isAuth = await AuthHelper.requireAuth(context);
-                if (!isAuth) return;
-
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const AreasScreen(),
-                  ),
-                );
+            child: VisibilityDetector(
+              key: const Key('section_discover_areas'),
+              onVisibilityChanged: (info) {
+                if (info.visibleFraction > 0.1 && !_hasLoadedAreas) {
+                  _loadAreasLazy();
+                }
               },
-              child: _buildAreaChips(),
+              child: _buildSection(
+                'Discover Areas',
+                onViewAll: () async {
+                  final isAuth = await AuthHelper.requireAuth(context);
+                  if (!isAuth) return;
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AreasScreen(),
+                    ),
+                  );
+                },
+                child: _buildAreaChips(),
+              ),
             ),
           ),
           const SliverToBoxAdapter(
@@ -2375,48 +2241,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     );
   }
 
-  Widget _buildNorthcoastProjects() {
-    // Show loading indicator if data is being loaded
-    if (_isLoading && _northCoastProjects.isEmpty) {
-      return SizedBox(
-        height: 180,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: 3,
-          itemBuilder: (context, index) {
-            return Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: const SkeletonProjectCard(),
-            );
-          },
-        ),
-      );
-    }
 
-    if (_northCoastProjects.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return SizedBox(
-      height: 180,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: _northCoastProjects.length,
-        itemBuilder: (context, index) {
-          final project = _northCoastProjects[index];
-          return Padding(
-            padding: EdgeInsets.only(
-                right: index < _northCoastProjects.length - 1 ? 12 : 0),
-            child: _buildLargeProjectCard(
-              project: project,
-            ),
-          );
-        },
-      ),
-    );
-  }
 
   Widget _buildNewCairoProjects() {
     // Show loading indicator if data is being loaded

@@ -345,10 +345,23 @@ class ProjectApi {
     }
   }
 
+  Future<List<ProjectModel>>? _continueWatchingInFlight;
+
   /// Continue watching list:
   /// - If logged in: derived from /watch-history/continue-watching
   /// - Otherwise: derived from local progress cache
-  Future<List<ProjectModel>> getContinueWatchingProjects() async {
+  Future<List<ProjectModel>> getContinueWatchingProjects() {
+    if (_continueWatchingInFlight != null) {
+      print('⚡ Coalescing in-flight getContinueWatchingProjects request in ProjectApi');
+      return _continueWatchingInFlight!;
+    }
+    _continueWatchingInFlight = _fetchContinueWatchingProjects().whenComplete(() {
+      _continueWatchingInFlight = null;
+    });
+    return _continueWatchingInFlight!;
+  }
+
+  Future<List<ProjectModel>> _fetchContinueWatchingProjects() async {
     // Prefer backend watch history if logged in.
     try {
       if (await _hasAuthToken()) {

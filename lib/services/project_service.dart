@@ -120,15 +120,30 @@ class ProjectDetails {
 }
 
 class ProjectService {
+  /// GET /projects/free?page=1&limit=10
+  /// Pass page and limit as strings to conform to backend DTO query validation requirements.
   static Future<List<ProjectSummary>> getFreeProjects({int page = 1, int limit = 10}) async {
     try {
       final response = await ApiClient.dio.get(
         '/projects/free',
-        queryParameters: {'page': page, 'limit': limit},
+        queryParameters: {'page': page.toString(), 'limit': limit.toString()},
       );
 
-      final List data = response.data;
-      return data.map((json) => ProjectSummary.fromJson(json)).toList();
+      List data;
+      final responseData = response.data;
+      if (responseData is List) {
+        data = responseData;
+      } else if (responseData is Map && responseData['value'] is List) {
+        data = responseData['value'] as List;
+      } else if (responseData is Map && responseData['items'] is List) {
+        data = responseData['items'] as List;
+      } else if (responseData is Map && responseData['data'] is List) {
+        data = responseData['data'] as List;
+      } else {
+        data = [];
+      }
+
+      return data.map((json) => ProjectSummary.fromJson(json as Map<String, dynamic>)).toList();
     } catch (e) {
       print('Error fetching free projects: $e');
       rethrow;
