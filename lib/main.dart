@@ -27,6 +27,7 @@ void main() async {
   };
 
   runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
     await _initializeApp();
     runApp(const OrientationApp());
   }, (error, stack) {
