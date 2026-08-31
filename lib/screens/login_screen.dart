@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../widgets/auth_header.dart';
 import '../widgets/custom_text_field.dart';
 import '../services/api/auth_api.dart';
+import '../utils/validators.dart';
 import 'forgot_password_screen.dart';
 import 'create_account_screen.dart';
 import 'main_screen.dart';
@@ -35,9 +36,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleLogin() async {
     // Validate inputs
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || _passwordController.text.isEmpty) {
       setState(() {
         _errorMessage = 'Please enter email and password';
+      });
+      return;
+    }
+
+    if (!Validators.isEmail(email)) {
+      setState(() {
+        _errorMessage = 'Please enter a valid email address';
       });
       return;
     }

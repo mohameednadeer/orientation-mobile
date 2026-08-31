@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api/auth_api.dart';
+import '../utils/validators.dart';
 
 class AccountInfoScreen extends StatefulWidget {
   const AccountInfoScreen({super.key});
@@ -94,30 +95,34 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
 
   Future<void> _saveChanges() async {
     // Validation for personal info
-    if (_firstNameController.text.trim().isEmpty) {
+    if (!Validators.isNonEmptyText(_firstNameController.text)) {
       _showSnackBar('Please enter your first name', isError: true);
       return;
     }
 
-    if (_lastNameController.text.trim().isEmpty) {
+    if (!Validators.isNonEmptyText(_lastNameController.text)) {
       _showSnackBar('Please enter your last name', isError: true);
       return;
     }
 
-    if (_emailController.text.trim().isEmpty) {
+    if (!Validators.isNonEmptyText(_emailController.text)) {
       _showSnackBar('Please enter your email', isError: true);
       return;
     }
 
     // Email validation
-    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-    if (!emailRegex.hasMatch(_emailController.text.trim())) {
+    if (!Validators.isEmail(_emailController.text)) {
       _showSnackBar('Please enter a valid email address', isError: true);
       return;
     }
 
-    if (_phoneController.text.trim().isEmpty) {
+    if (!Validators.isNonEmptyText(_phoneController.text)) {
       _showSnackBar('Please enter your phone number', isError: true);
+      return;
+    }
+
+    if (!Validators.isPhone(_phoneController.text.trim())) {
+      _showSnackBar('Please enter a valid phone number', isError: true);
       return;
     }
 
@@ -134,8 +139,8 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
         return;
       }
 
-      if (_newPasswordController.text.length < 6) {
-        _showSnackBar('Password must be at least 6 characters', isError: true);
+      if (!Validators.isPassword(_newPasswordController.text)) {
+        _showSnackBar('Password must be 8-20 characters', isError: true);
         return;
       }
     }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/project_card.dart';
 import '../services/api/project_api.dart';
 import '../services/api/home_api.dart';
@@ -33,11 +34,15 @@ class _LatestForUsScreenState extends State<LatestForUsScreen> {
   Future<void> _loadProjects() async {
     try {
       final projects = await _homeApi.getLatestProjects();
-      // Load saved status for each project
+      
+      // Load saved status for all projects with a single SharedPreferences read
+      final prefs = await SharedPreferences.getInstance();
+      final savedIds = (prefs.getStringList('saved_projects') ?? []).toSet();
       final savedStatus = <String, bool>{};
       for (final project in projects) {
-        savedStatus[project.id] = await _projectApi.isProjectSaved(project.id);
+        savedStatus[project.id] = savedIds.contains(project.id);
       }
+
       if (mounted) {
         setState(() {
           _projects = projects;

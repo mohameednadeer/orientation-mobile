@@ -364,19 +364,31 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
     }
 
     try {
-      // 1. Fetch main project data
-      final project = await _projectApi.getProjectById(widget.projectId!);
+      // Step 1: Fire main project fetch and independent sub-fetches in parallel
+      final projectFuture = _projectApi.getProjectById(widget.projectId!);
+      final detailsFuture = ProjectService.getProjectDetails(widget.projectId!);
+      final clipsFuture = _clipService.getProjectClips(widget.projectId!);
+      final pdfFilesFuture = _projectApi.getPdfFiles(widget.projectId!);
+      final isSavedFuture = _projectApi.isProjectSaved(widget.projectId!);
+      final inventoryFuture = _projectApi.getInventoryUrl(widget.projectId!);
 
-      // Fetch dynamic subscription-aware details from NestJS backend
-      final projectDetails = await ProjectService.getProjectDetails(widget.projectId!);
+      final results = await Future.wait([
+        projectFuture,
+        detailsFuture,
+        clipsFuture,
+        pdfFilesFuture,
+        isSavedFuture,
+        inventoryFuture,
+      ]);
 
-      // 2. Fetch all other data sequentially
-      final clips = await _clipService.getProjectClips(widget.projectId!);
-      final pdfFiles = await _projectApi.getPdfFiles(widget.projectId!);
-      final isSaved = await _projectApi.isProjectSaved(widget.projectId!);
-      final inventoryUrl = await _projectApi.getInventoryUrl(widget.projectId!);
+      final project = results[0] as ProjectModel?;
+      final projectDetails = results[1] as ProjectDetails;
+      final clips = results[2] as List<ClipModel>;
+      final pdfFiles = results[3] as List<PdfFileModel>;
+      final isSaved = results[4] as bool;
+      final inventoryUrl = results[5] as String?;
 
-      // 3. Handle Developer Projects separately
+      // Step 2: Only developer projects depend on project.developerId
       List<ProjectModel> relatedProjects = [];
       if (project != null && project.developerId.isNotEmpty) {
         try {

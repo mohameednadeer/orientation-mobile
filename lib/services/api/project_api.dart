@@ -25,6 +25,13 @@ class ProjectApi {
   static DateTime? _savedReelsCacheTime;
   static const Duration _savedReelsCacheDuration = Duration(minutes: 2);
 
+  // In-memory catalog caches for PDF and Inventory files
+  static List<dynamic>? _pdfCatalogCache;
+  static DateTime? _pdfCatalogCacheTime;
+  static List<dynamic>? _inventoryCatalogCache;
+  static DateTime? _inventoryCatalogCacheTime;
+  static const Duration _filesCacheDuration = Duration(minutes: 2);
+
   ProjectApi() {
     _dioClient.init();
   }
@@ -1098,7 +1105,11 @@ class ProjectApi {
       });
       final res =
           await _dioClient.dio.post('/files/upload/inventory', data: form);
-      return res.statusCode == 200 || res.statusCode == 201;
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        _inventoryCatalogCache = null;
+        return true;
+      }
+      return false;
     } catch (_) {
       return false;
     }
@@ -1108,25 +1119,34 @@ class ProjectApi {
   /// Inventory has project (not projectId) and inventoryUrl (not fileUrl).
   Future<String?> getInventoryUrl(String projectId) async {
     try {
-      // New route (docs): GET /files/inventory -> List
-      Response response;
-      try {
-        response = await _dioClient.dio.get('/files/inventory');
-      } on DioException catch (e) {
-        // Backwards-compatible fallback
-        if (e.response?.statusCode == 404) {
-          response = await _dioClient.dio.get('/files/get/inventory');
-        } else {
-          rethrow;
+      List<dynamic> list;
+      if (_inventoryCatalogCache != null &&
+          _inventoryCatalogCacheTime != null &&
+          DateTime.now().difference(_inventoryCatalogCacheTime!) < _filesCacheDuration) {
+        list = _inventoryCatalogCache!;
+      } else {
+        // New route (docs): GET /files/inventory -> List
+        Response response;
+        try {
+          response = await _dioClient.dio.get('/files/inventory');
+        } on DioException catch (e) {
+          // Backwards-compatible fallback
+          if (e.response?.statusCode == 404) {
+            response = await _dioClient.dio.get('/files/get/inventory');
+          } else {
+            rethrow;
+          }
         }
-      }
 
-      final dynamic raw = response.data;
-      final List<dynamic> list = raw is List
-          ? raw
-          : (raw is Map<String, dynamic>
-              ? ((raw['inventories'] as List?) ?? <dynamic>[])
-              : <dynamic>[]);
+        final dynamic raw = response.data;
+        list = raw is List
+            ? raw
+            : (raw is Map<String, dynamic>
+                ? ((raw['inventories'] as List?) ?? <dynamic>[])
+                : <dynamic>[]);
+        _inventoryCatalogCache = list;
+        _inventoryCatalogCacheTime = DateTime.now();
+      }
 
       for (final e in list) {
         final m = e as Map<String, dynamic>?;
@@ -1147,22 +1167,32 @@ class ProjectApi {
   /// File has project (not projectId) and pdfUrl (not fileUrl).
   Future<List<PdfFileModel>> getPdfFiles(String projectId) async {
     try {
-      // New route (docs): GET /files/pdf -> List
-      Response response;
-      try {
-        response = await _dioClient.dio.get('/files/pdf');
-      } on DioException catch (e) {
-        // Backwards-compatible fallback
-        if (e.response?.statusCode == 404) {
-          response = await _dioClient.dio.get('/files/get/pdf');
-        } else {
-          rethrow;
+      List<dynamic> list;
+      if (_pdfCatalogCache != null &&
+          _pdfCatalogCacheTime != null &&
+          DateTime.now().difference(_pdfCatalogCacheTime!) < _filesCacheDuration) {
+        list = _pdfCatalogCache!;
+      } else {
+        // New route (docs): GET /files/pdf -> List
+        Response response;
+        try {
+          response = await _dioClient.dio.get('/files/pdf');
+        } on DioException catch (e) {
+          // Backwards-compatible fallback
+          if (e.response?.statusCode == 404) {
+            response = await _dioClient.dio.get('/files/get/pdf');
+          } else {
+            rethrow;
+          }
         }
+
+        final dynamic raw = response.data;
+        list =
+            raw is List ? raw : ((raw as Map?)?['pdfs'] as List? ?? <dynamic>[]);
+        _pdfCatalogCache = list;
+        _pdfCatalogCacheTime = DateTime.now();
       }
 
-      final dynamic raw = response.data;
-      final List<dynamic> list =
-          raw is List ? raw : ((raw as Map?)?['pdfs'] as List? ?? <dynamic>[]);
       return list
           .map((e) => e as Map<String, dynamic>)
           .where((m) =>
@@ -1199,7 +1229,9 @@ class ProjectApi {
           rethrow;
         }
       }
-      return res.statusCode == 200 || res.statusCode == 201;
+      final success = res.statusCode == 200 || res.statusCode == 201;
+      if (success) _inventoryCatalogCache = null;
+      return success;
     } catch (_) {
       return false;
     }
@@ -1228,7 +1260,9 @@ class ProjectApi {
           rethrow;
         }
       }
-      return res.statusCode == 200 || res.statusCode == 201;
+      final success = res.statusCode == 200 || res.statusCode == 201;
+      if (success) _pdfCatalogCache = null;
+      return success;
     } catch (_) {
       return false;
     }
@@ -1248,7 +1282,9 @@ class ProjectApi {
           rethrow;
         }
       }
-      return res.statusCode == 200 || res.statusCode == 204;
+      final success = res.statusCode == 200 || res.statusCode == 204;
+      if (success) _inventoryCatalogCache = null;
+      return success;
     } catch (_) {
       return false;
     }
@@ -1267,7 +1303,9 @@ class ProjectApi {
           rethrow;
         }
       }
-      return res.statusCode == 200 || res.statusCode == 204;
+      final success = res.statusCode == 200 || res.statusCode == 204;
+      if (success) _pdfCatalogCache = null;
+      return success;
     } catch (_) {
       return false;
     }

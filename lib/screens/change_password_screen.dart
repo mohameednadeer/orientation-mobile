@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/auth_header.dart';
 import '../widgets/custom_text_field.dart';
 import '../services/api/auth_api.dart';
+import '../utils/validators.dart';
 import 'login_screen.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
@@ -37,6 +38,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   Future<void> _handleResetPassword() async {
     // Validate inputs
+    if (!Validators.isOtp(widget.otp)) {
+      setState(() {
+        _errorMessage = 'Invalid reset code format';
+      });
+      return;
+    }
+
     if (_newPasswordController.text.isEmpty) {
       setState(() {
         _errorMessage = 'Please enter a new password';
@@ -51,7 +59,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       return;
     }
 
-    if (_newPasswordController.text.length < 8) {
+    if (!Validators.isPassword(_newPasswordController.text)) {
       setState(() {
         _errorMessage = 'Password must be at least 8 characters';
       });
