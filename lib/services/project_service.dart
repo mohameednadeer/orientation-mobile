@@ -1,5 +1,6 @@
 import '../core/api_client.dart';
 import '../models/episode_model.dart';
+import 'api/project_api.dart';
 
 class ProjectSummary {
   final String id;
@@ -150,10 +151,14 @@ class ProjectService {
     }
   }
 
-  static Future<ProjectDetails> getProjectDetails(String projectId) async {
+  static Future<ProjectDetails> getProjectDetails(String projectId, {bool forceRefresh = false}) async {
     try {
-      final response = await ApiClient.dio.get('/projects/$projectId');
-      return ProjectDetails.fromJson(response.data);
+      final projectApi = ProjectApi();
+      final json = await projectApi.getProjectRawJson(projectId, forceRefresh: forceRefresh);
+      if (json == null) {
+        throw Exception('Project not found for ID $projectId');
+      }
+      return ProjectDetails.fromJson(json);
     } catch (e) {
       print('Error fetching project details: $e');
       rethrow;

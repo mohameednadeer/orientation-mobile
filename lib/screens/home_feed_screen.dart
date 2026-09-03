@@ -27,6 +27,7 @@ import 'search_screen.dart';
 import 'continue_watching_screen.dart';
 import 'account_screen.dart';
 import 'login_screen.dart';
+import '../services/user_service.dart';
 
 class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
@@ -41,6 +42,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   final ScrollController _scrollController = ScrollController();
   final HomeApi _homeApi = HomeApi();
   final AuthApi _authApi = AuthApi();
+  final UserService _userService = UserService();
   final CacheService _cacheService = CacheService();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey<AppDrawerState> _drawerKey = GlobalKey<AppDrawerState>();
@@ -49,7 +51,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   int _currentFeaturedPage = 0;
   String _selectedFilter = 'Medical';
   bool _isLoading = true;
-  String _userName = 'User';
+  String _userName = 'Guest';
+  bool _isUserNameLoading = true;
   DateTime? _lastRefreshTime;
 
   final List<String> _filters = [
@@ -527,43 +530,68 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     if (!isLoggedIn) {
       setState(() {
         _userName = 'Guest';
+        _isUserNameLoading = false;
       });
       return;
     }
 
-    // User is logged in, load user info
+    // 1. Check cached info for instant UI loading
     final userInfo = await _authApi.getStoredUserInfo();
     if (!mounted) return;
 
-    setState(() {
-      // Use firstName + lastName if available, otherwise fallback to username
-      final firstName = userInfo['firstName'] ?? '';
-      final lastName = userInfo['lastName'] ?? '';
-      if (firstName.isNotEmpty || lastName.isNotEmpty) {
-        _userName = '$firstName $lastName'.trim();
-      } else {
-        _userName = userInfo['username'] ?? 'User';
-      }
-    });
+    final cachedFirstName = userInfo['firstName'] ?? '';
+    final cachedLastName = userInfo['lastName'] ?? '';
+    final cachedUsername = userInfo['username'] ?? '';
 
-    // Fetch fresh user profile in background
-    try {
-      final freshProfile = await _authApi.getUserProfile();
-      if (!mounted) return;
+    String initialName = 'Guest';
+    if (cachedFirstName.isNotEmpty) {
+      initialName = cachedFirstName;
+    } else if (cachedLastName.isNotEmpty) {
+      initialName = cachedLastName;
+    } else if (cachedUsername.isNotEmpty) {
+      initialName = cachedUsername;
+    }
+
+    if (mounted) {
       setState(() {
-        final firstName = freshProfile['firstName'] ?? '';
-        final lastName = freshProfile['lastName'] ?? '';
-        final username = freshProfile['username'] ?? '';
-        if (firstName.isNotEmpty || lastName.isNotEmpty) {
-          _userName = '$firstName $lastName'.trim();
-        } else if (username.isNotEmpty) {
-          _userName = username;
-        } else {
-          _userName = 'User';
-        }
+        _userName = initialName;
+        // If we found a cached name, display it immediately
+        _isUserNameLoading = (initialName == 'Guest');
+      });
+    }
+
+    // 2. Fetch fresh user profile via UserService
+    try {
+      final freshProfile = await _userService.getProfile();
+      if (!mounted) return;
+
+      final firstName = freshProfile['firstName'] ?? '';
+      final lastName = freshProfile['lastName'] ?? '';
+      final username = freshProfile['username'] ?? '';
+
+      String nameToDisplay = 'Guest';
+      if (firstName.isNotEmpty) {
+        nameToDisplay = firstName;
+      } else if (lastName.isNotEmpty) {
+        nameToDisplay = lastName;
+      } else if (username.isNotEmpty) {
+        nameToDisplay = username;
+      }
+
+      setState(() {
+        _userName = nameToDisplay;
+        _isUserNameLoading = false;
       });
     } catch (e) {
-      print('Error fetching fresh user profile for greeting: $e');
+      print('Error fetching user profile from UserService: $e');
+      if (mounted) {
+        setState(() {
+          if (_userName == 'User' || _userName.isEmpty) {
+            _userName = 'Guest';
+          }
+          _isUserNameLoading = false;
+        });
+      }
     }
   }
 
@@ -843,7 +871,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                   ),
                 );
               },
-              child: _latestProjects.isNotEmpty
+              child: !_isLoading
                   ? _buildHorizontalProjectList()
                   : _buildHorizontalSkeletonList(),
             ),
@@ -921,7 +949,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                     ),
                   );
                 },
-                child: _top10Projects.isNotEmpty
+                child: _hasLoadedTop10
                     ? _buildTop10List()
                     : _buildHorizontalSkeletonList(),
               ),
@@ -951,7 +979,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                     ),
                   );
                 },
-                child: _newCairoProjects.isNotEmpty
+                child: _hasLoadedNewCairo
                     ? _buildNewCairoProjects()
                     : _buildHorizontalSkeletonList(),
               ),
@@ -981,7 +1009,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                     ),
                   );
                 },
-                child: _octoberProjects.isNotEmpty
+                child: _hasLoadedOctober
                     ? _buildOctoberProjects()
                     : _buildHorizontalSkeletonList(),
               ),
@@ -1000,7 +1028,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
               child: _buildSection(
                 'Upcoming Projects',
                 onViewAll: null,
-                child: _upcomingProjects.isNotEmpty
+                child: _hasLoadedUpcoming
                     ? _buildUpcomingProjectsList()
                     : _buildHorizontalSkeletonList(),
               ),
@@ -1573,14 +1601,25 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                   fontSize: 12,
                 ),
               ),
-              Text(
-                _userName,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+              if (_isUserNameLoading)
+                Container(
+                  margin: const EdgeInsets.only(top: 2, bottom: 2),
+                  width: 55,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                )
+              else
+                Text(
+                  _userName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
             ],
           ),
           const Spacer(),
@@ -1754,9 +1793,29 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     );
   }
 
+  Widget _buildEmptyStateWidget(String message, {double height = 150}) {
+    return SizedBox(
+      height: height,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.5),
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildHorizontalProjectList() {
     if (_latestProjects.isEmpty) {
-      return const SizedBox.shrink();
+      return _buildEmptyStateWidget('No projects available at the moment', height: 200);
     }
 
     return SizedBox(
@@ -2362,7 +2421,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
 
   Widget _buildTop10List() {
     if (_top10Projects.isEmpty) {
-      return const SizedBox.shrink();
+      return _buildEmptyStateWidget('No top projects available at the moment', height: 175);
     }
 
     final displayProjects = _top10Projects.take(10).toList();
@@ -2422,29 +2481,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     );
   }
 
-
-
   Widget _buildNewCairoProjects() {
-    // Show loading indicator if data is being loaded
-    if (_isLoading && _newCairoProjects.isEmpty) {
-      return SizedBox(
-        height: 180,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: 3,
-          itemBuilder: (context, index) {
-            return Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: const SkeletonProjectCard(),
-            );
-          },
-        ),
-      );
-    }
-
     if (_newCairoProjects.isEmpty) {
-      return const SizedBox.shrink();
+      return _buildEmptyStateWidget('No projects in New Cairo at the moment', height: 180);
     }
 
     return SizedBox(
@@ -2468,26 +2507,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   }
 
   Widget _buildOctoberProjects() {
-    // Show loading indicator if data is being loaded
-    if (_isLoading && _octoberProjects.isEmpty) {
-      return SizedBox(
-        height: 180,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: 3,
-          itemBuilder: (context, index) {
-            return Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: const SkeletonProjectCard(),
-            );
-          },
-        ),
-      );
-    }
-
     if (_octoberProjects.isEmpty) {
-      return const SizedBox.shrink();
+      return _buildEmptyStateWidget('No projects in October at the moment', height: 180);
     }
 
     return SizedBox(
@@ -2656,39 +2677,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   }
 
   Widget _buildUpcomingProjectsList() {
-    if (_isLoading) {
-      return SizedBox(
-        height: 240,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: 3,
-          itemBuilder: (context, index) {
-            return Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: const SkeletonProjectCard(),
-            );
-          },
-        ),
-      );
-    }
-
     if (_upcomingProjects.isEmpty) {
-      return SizedBox(
-        height: 240,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'No upcoming projects',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.5),
-                fontSize: 14,
-              ),
-            ),
-          ),
-        ),
-      );
+      return _buildEmptyStateWidget('No upcoming projects available at the moment', height: 240);
     }
 
     return SizedBox(

@@ -552,11 +552,11 @@ class ClipsScreenState extends State<ClipsScreen> {
   final GlobalKey<ReelsScreenState> _reelsKey = GlobalKey<ReelsScreenState>();
   List<ClipModel> _clips = [];
   bool _isLoading = true;
+  bool _hasLoadedOnce = false;
 
   @override
   void initState() {
     super.initState();
-    _loadClips();
   }
 
   Future<void> _loadClips() async {
@@ -581,6 +581,10 @@ class ClipsScreenState extends State<ClipsScreen> {
 
   void setVisible(bool visible) {
     _reelsKey.currentState?.setVisible(visible);
+    if (visible && !_hasLoadedOnce) {
+      _hasLoadedOnce = true;
+      _loadClips();
+    }
   }
 
   @override
@@ -608,7 +612,7 @@ class ClipsScreenState extends State<ClipsScreen> {
       key: _reelsKey,
       clips: _clips,
       initialIndex: 0,
-      initialVisible: false,
+      initialVisible: true,
     );
   }
 }

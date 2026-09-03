@@ -26,6 +26,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   bool _isLoading = false;
   String? _errorMessage;
+  String? _passwordError;
 
   static const Color brandRed = Color(0xFFE50914);
 
@@ -48,6 +49,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     if (_newPasswordController.text.isEmpty) {
       setState(() {
         _errorMessage = 'Please enter a new password';
+        _passwordError = 'Please enter a new password';
       });
       return;
     }
@@ -55,6 +57,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     if (_newPasswordController.text != _confirmPasswordController.text) {
       setState(() {
         _errorMessage = 'Passwords do not match';
+        _passwordError = 'Passwords do not match';
       });
       return;
     }
@@ -62,6 +65,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     if (!Validators.isPassword(_newPasswordController.text)) {
       setState(() {
         _errorMessage = 'Password must be at least 8 characters';
+        _passwordError = 'Password must be at least 8 characters';
       });
       return;
     }
@@ -69,6 +73,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _passwordError = null;
     });
 
     try {
@@ -107,6 +112,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       
       setState(() {
         _errorMessage = errorMessage;
+        _passwordError = errorMessage;
       });
     } finally {
       if (mounted) {
@@ -162,6 +168,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                       prefixIcon: Icons.lock_outline,
                       isPassword: true,
                       controller: _newPasswordController,
+                      errorText: _passwordError,
+                      onChanged: (value) {
+                        if (_passwordError != null) {
+                          setState(() {
+                            _passwordError = null;
+                          });
+                        }
+                      },
                     ),
                     const SizedBox(height: 16),
                     // Confirm password field
@@ -170,6 +184,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                       prefixIcon: Icons.lock_outline,
                       isPassword: true,
                       controller: _confirmPasswordController,
+                      errorText: _passwordError,
+                      onChanged: (value) {
+                        if (_passwordError != null) {
+                          setState(() {
+                            _passwordError = null;
+                          });
+                        }
+                      },
                     ),
                     // Error message
                     if (_errorMessage != null) ...[

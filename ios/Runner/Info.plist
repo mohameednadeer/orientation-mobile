@@ -51,6 +51,36 @@
 		<string>http</string>
 		<string>tel</string>
 		<string>sms</string>
+		<string>mailto</string>
+	</array>
+
+	<!-- App Transport Security (ATS) for APIs & Video Streaming -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+
+	<!-- Privacy Keys for File Picker & Media Access -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app requires access to your photo library to select media for your account and projects.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app requires access to your camera to take photos for your account and projects.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app requires access to your microphone when capturing video.</string>
+
+	<!-- URL Schemes for Google & Social Authentication -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<!-- Replace with your actual REVERSED_CLIENT_ID from GoogleService-Info.plist -->
+				<string>com.googleusercontent.apps.YOUR_REVERSED_CLIENT_ID</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

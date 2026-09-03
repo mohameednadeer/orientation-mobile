@@ -26,8 +26,9 @@ class _EpisodePlayerScreenState extends State<EpisodePlayerScreen> with WidgetsB
   bool _isLoading = true;
   String? _errorMessage;
   final ProjectApi _projectApi = ProjectApi();
-  Timer? _progressTimer;
   String? _projectId;
+  bool _wasPlaying = false;
+  Duration _lastPosition = Duration.zero;
 
   @override
   void initState() {
@@ -47,7 +48,7 @@ class _EpisodePlayerScreenState extends State<EpisodePlayerScreen> with WidgetsB
     if (state == AppLifecycleState.paused || 
         state == AppLifecycleState.inactive) {
       _videoController?.pause();
-      _saveCurrentProgress(force: true);
+      _saveCurrentProgress();
     }
   }
 
@@ -144,12 +145,8 @@ class _EpisodePlayerScreenState extends State<EpisodePlayerScreen> with WidgetsB
         setState(() {
           _isLoading = false;
         });
-        // Add listener to track progress changes
-        _videoController!.addListener(_onVideoPositionChanged);
-        // Start tracking progress
-        _startProgressTracking();
-        // Save initial progress immediately
-        _saveCurrentProgress(force: true);
+        // Listen to player events (pause / seek detection)
+        _videoController!.addListener(_onPlayerStateChanged);
       }
     } catch (e) {
       if (mounted) {
@@ -161,20 +158,29 @@ class _EpisodePlayerScreenState extends State<EpisodePlayerScreen> with WidgetsB
     }
   }
 
-  double? _lastSavedProgress;
+  void _onPlayerStateChanged() {
+    if (_videoController == null || !_videoController!.value.isInitialized) return;
 
-  void _onVideoPositionChanged() {
-    _saveCurrentProgress();
-  }
+    final isPlaying = _videoController!.value.isPlaying;
+    final currentPos = _videoController!.value.position;
 
-  void _startProgressTracking() {
-    // Track progress every 2 seconds (for short videos)
-    _progressTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+    // 1. Save on Pause event (transitioning from playing to paused)
+    if (_wasPlaying && !isPlaying) {
+      print('⏸️ Video paused — saving watch progress');
       _saveCurrentProgress();
-    });
+    }
+    _wasPlaying = isPlaying;
+
+    // 2. Save on Seek event (position jump > 2000ms)
+    final diff = (currentPos - _lastPosition).inMilliseconds.abs();
+    if (diff > 2000 && _lastPosition != Duration.zero) {
+      print('⏩ Video seeked (${_lastPosition.inSeconds}s -> ${currentPos.inSeconds}s) — saving watch progress');
+      _saveCurrentProgress();
+    }
+    _lastPosition = currentPos;
   }
 
-  Future<void> _saveCurrentProgress({bool force = false}) async {
+  Future<void> _saveCurrentProgress() async {
     if (_videoController == null || _projectId == null || _projectId!.isEmpty) return;
     if (!_videoController!.value.isInitialized) return;
 
@@ -183,10 +189,6 @@ class _EpisodePlayerScreenState extends State<EpisodePlayerScreen> with WidgetsB
     if (duration.inMilliseconds <= 0) return;
 
     final progress = position.inMilliseconds / duration.inMilliseconds;
-    if (!force && _lastSavedProgress != null && (progress - _lastSavedProgress!).abs() <= 0.02) {
-      return; // already saved recently via listener, skip
-    }
-    _lastSavedProgress = progress;
 
     print('💾 Saving progress: projectId=$_projectId, episodeId=${widget.episode.id}, progress=${(progress * 100).toStringAsFixed(1)}%');
     await _projectApi.updateEpisodeWatchProgress(
@@ -201,12 +203,11 @@ class _EpisodePlayerScreenState extends State<EpisodePlayerScreen> with WidgetsB
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _progressTimer?.cancel();
     // Remove listener
-    _videoController?.removeListener(_onVideoPositionChanged);
-    // Save progress before disposing (force save)
+    _videoController?.removeListener(_onPlayerStateChanged);
+    // Save progress before disposing
     print('🔄 Disposing - saving final progress...');
-    _saveCurrentProgress(force: true);
+    _saveCurrentProgress();
     _videoController?.pause();
     // Reset to portrait
     SystemChrome.setPreferredOrientations([

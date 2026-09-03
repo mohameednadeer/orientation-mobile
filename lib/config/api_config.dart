@@ -23,7 +23,7 @@ class ApiConfig {
   // ── Base URLs ──────────────────────────────────────────────────────────────
 
   /// Production base URL.
-  static const String productionUrl = 'https://test.orientationapps.com/api/v1';
+  static const String productionUrl = 'https://api.orientationapps.com/api/v1';
 
   /// Local development URL (Android emulator uses 10.0.2.2 instead of localhost).
   static const String devUrl = 'http://10.0.2.2:3000';

@@ -8,6 +8,8 @@ class CustomTextField extends StatefulWidget {
   final TextEditingController? controller;
   final TextInputType keyboardType;
   final String? Function(String?)? validator;
+  final String? errorText;
+  final ValueChanged<String>? onChanged;
 
   const CustomTextField({
     super.key,
@@ -17,6 +19,8 @@ class CustomTextField extends StatefulWidget {
     this.controller,
     this.keyboardType = TextInputType.text,
     this.validator,
+    this.errorText,
+    this.onChanged,
   });
 
   @override
@@ -30,10 +34,12 @@ class _CustomTextFieldState extends State<CustomTextField> {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(
-          color: Colors.white.withOpacity(0.3),
-          width: 1,
-        ),
+        border: widget.errorText != null
+            ? null
+            : Border.all(
+                color: Colors.white.withOpacity(0.3),
+                width: 1,
+              ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: TextFormField(
@@ -41,6 +47,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
         obscureText: widget.isPassword ? _obscureText : false,
         keyboardType: widget.keyboardType,
         validator: widget.validator,
+        onChanged: widget.onChanged,
         style: const TextStyle(
           color: Colors.white,
           fontSize: 16,
@@ -92,6 +99,15 @@ class _CustomTextFieldState extends State<CustomTextField> {
                 )
               : null,
           border: InputBorder.none,
+          errorText: widget.errorText,
+          errorBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.red, width: 1.5),
+            borderRadius: BorderRadius.all(Radius.circular(12)),
+          ),
+          focusedErrorBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.red, width: 2.0),
+            borderRadius: BorderRadius.all(Radius.circular(12)),
+          ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 16,

@@ -32,6 +32,10 @@ class ProjectApi {
   static DateTime? _inventoryCatalogCacheTime;
   static const Duration _filesCacheDuration = Duration(minutes: 2);
 
+  // In-flight request deduplication for saved lists
+  static Future<List<ProjectModel>>? _savedProjectsInFlight;
+  static Future<List<ClipModel>>? _savedReelsInFlight;
+
   ProjectApi() {
     _dioClient.init();
   }
@@ -46,15 +50,49 @@ class ProjectApi {
     print('🗑️ Cleared all reels caches');
   }
 
-  /// GET /projects/:id
-  Future<ProjectModel?> getProjectById(String id) async {
+  // In-flight request coalescing maps
+  static final Map<String, Future<Map<String, dynamic>?>> _projectRawInFlight = {};
+  static final Map<String, Future<List<ProjectModel>>> _developerProjectsInFlight = {};
+
+  /// GET /projects/:id — Fetches raw project JSON with in-flight coalescing and 5-min CacheManager TTL
+  Future<Map<String, dynamic>?> getProjectRawJson(String id, {bool forceRefresh = false}) async {
+    final cacheKey = 'project_raw_json_$id';
+    if (!forceRefresh) {
+      final cached = await CacheManager.get<Map<String, dynamic>>(cacheKey);
+      if (cached != null) return cached;
+    }
+
+    if (_projectRawInFlight.containsKey(id)) {
+      return _projectRawInFlight[id];
+    }
+
+    final future = _fetchProjectRawJson(id, cacheKey).whenComplete(() {
+      _projectRawInFlight.remove(id);
+    });
+    _projectRawInFlight[id] = future;
+    return future;
+  }
+
+  Future<Map<String, dynamic>?> _fetchProjectRawJson(String id, String cacheKey) async {
     try {
       final response = await _dioClient.dio.get('/projects/$id');
-      return ProjectModel.fromJson(response.data as Map<String, dynamic>);
+      if (response.data is Map<String, dynamic>) {
+        final rawData = response.data as Map<String, dynamic>;
+        await CacheManager.set(cacheKey, rawData, duration: const Duration(minutes: 5));
+        return rawData;
+      }
+      return null;
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) return null;
       rethrow;
     }
+  }
+
+  /// GET /projects/:id — Get ProjectModel by ID
+  Future<ProjectModel?> getProjectById(String id, {bool forceRefresh = false}) async {
+    final rawJson = await getProjectRawJson(id, forceRefresh: forceRefresh);
+    if (rawJson == null) return null;
+    return ProjectModel.fromJson(rawJson);
   }
 
   /// GET /episode, then filter by projectId
@@ -141,8 +179,19 @@ class ProjectApi {
   }
 
   /// Get saved projects (GET /users/saved-projects or GET /projects/saved)
-  /// Falls back to local cache if backend unavailable
-  Future<List<ProjectModel>> getSavedProjects() async {
+  /// Deduplicates in-flight requests and returns valid empty list without falling back to secondary endpoint.
+  Future<List<ProjectModel>> getSavedProjects() {
+    if (_savedProjectsInFlight != null) {
+      print('⚡ Returning in-flight getSavedProjects request');
+      return _savedProjectsInFlight!;
+    }
+    _savedProjectsInFlight = _fetchSavedProjects().whenComplete(() {
+      _savedProjectsInFlight = null;
+    });
+    return _savedProjectsInFlight!;
+  }
+
+  Future<List<ProjectModel>> _fetchSavedProjects() async {
     try {
       if (await _hasAuthToken()) {
         // Try GET /users/saved-projects first (returns { message, savedProjects: [...] })
@@ -160,7 +209,7 @@ class ProjectApi {
             projectsList = data;
           }
 
-          if (projectsList != null && projectsList.isNotEmpty) {
+          if (projectsList != null) {
             final projects = projectsList
                 .map((e) {
                   try {
@@ -220,28 +269,26 @@ class ProjectApi {
             projectsList = <dynamic>[];
           }
 
-          if (projectsList.isNotEmpty) {
-            final projects = projectsList
-                .map((e) {
-                  try {
-                    return ProjectModel.fromJson(e as Map<String, dynamic>);
-                  } catch (e) {
-                    print('⚠️ Error parsing saved project: $e');
-                    return null;
-                  }
-                })
-                .whereType<ProjectModel>()
-                .toList();
+          final projects = projectsList
+              .map((e) {
+                try {
+                  return ProjectModel.fromJson(e as Map<String, dynamic>);
+                } catch (e) {
+                  print('⚠️ Error parsing saved project: $e');
+                  return null;
+                }
+              })
+              .whereType<ProjectModel>()
+              .toList();
 
-            // Update local cache
-            final prefs = await SharedPreferences.getInstance();
-            final ids = projects.map((p) => p.id).toList();
-            await prefs.setStringList('saved_projects', ids);
+          // Update local cache
+          final prefs = await SharedPreferences.getInstance();
+          final ids = projects.map((p) => p.id).toList();
+          await prefs.setStringList('saved_projects', ids);
 
-            print(
-                '✅ Loaded ${projects.length} saved projects from /projects/saved');
-            return projects;
-          }
+          print(
+              '✅ Loaded ${projects.length} saved projects from /projects/saved');
+          return projects;
         } catch (e) {
           print('⚠️ /projects/saved also failed: $e');
         }
@@ -738,8 +785,19 @@ class ProjectApi {
     }
   }
 
-  /// Get saved reels (with in-memory caching)
-  Future<List<ClipModel>> getSavedReels({bool useCache = true}) async {
+  /// Get saved reels (with in-memory caching and in-flight deduplication)
+  Future<List<ClipModel>> getSavedReels({bool useCache = true}) {
+    if (_savedReelsInFlight != null) {
+      print('⚡ Returning in-flight getSavedReels request');
+      return _savedReelsInFlight!;
+    }
+    _savedReelsInFlight = _fetchSavedReels(useCache: useCache).whenComplete(() {
+      _savedReelsInFlight = null;
+    });
+    return _savedReelsInFlight!;
+  }
+
+  Future<List<ClipModel>> _fetchSavedReels({bool useCache = true}) async {
     // Check in-memory cache first
     if (useCache &&
         _savedReelIdsCache != null &&
@@ -775,7 +833,7 @@ class ProjectApi {
             reelsList = data;
           }
 
-          if (reelsList != null && reelsList.isNotEmpty) {
+          if (reelsList != null) {
             final reels = reelsList
                 .map((e) {
                   try {
@@ -817,26 +875,25 @@ class ProjectApi {
             reelsList = <dynamic>[];
           }
 
-          if (reelsList.isNotEmpty) {
-            final reels = reelsList
-                .map((e) {
-                  try {
-                    return ClipModel.fromJson(e as Map<String, dynamic>);
-                  } catch (e) {
-                    print('⚠️ Error parsing saved reel: $e');
-                    return null;
-                  }
-                })
-                .whereType<ClipModel>()
-                .toList();
+          final reels = reelsList
+              .map((e) {
+                try {
+                  return ClipModel.fromJson(e as Map<String, dynamic>);
+                } catch (e) {
+                  print('⚠️ Error parsing saved reel: $e');
+                  return null;
+                }
+              })
+              .whereType<ClipModel>()
+              .toList();
 
-            // Update cache
-            _savedReelIdsCache = reels.map((r) => r.id).toSet();
-            _savedReelsCacheTime = DateTime.now();
+          // Update cache
+          _savedReelIdsCache = reels.map((r) => r.id).toSet();
+          _savedReelsCacheTime = DateTime.now();
 
-            print('✅ Loaded ${reels.length} saved reels from /reels/saved');
-            return reels;
-          }
+          print(
+              '✅ Loaded ${reels.length} saved reels from /reels/saved');
+          return reels;
         } catch (e) {
           print('⚠️ /reels/saved also failed: $e');
         }
@@ -898,7 +955,32 @@ class ProjectApi {
 
   /// GET /projects/developer?developer=ID — Get projects by developer ID
   /// OR GET /developer/me/projects — Get projects for authenticated developer (if developerId is empty)
-  Future<List<ProjectModel>> getDeveloperProjects(String developerId) async {
+  Future<List<ProjectModel>> getDeveloperProjects(String developerId, {bool forceRefresh = false}) async {
+    final cacheKey = 'developer_projects_${developerId.trim()}';
+
+    if (!forceRefresh) {
+      final cached = await CacheManager.get<List<dynamic>>(cacheKey);
+      if (cached != null) {
+        print('⚡ Loaded ${cached.length} developer projects from CacheManager ($cacheKey)');
+        return cached
+            .map((e) => ProjectModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+    }
+
+    if (_developerProjectsInFlight.containsKey(cacheKey)) {
+      print('⚡ Joining existing in-flight request for $cacheKey');
+      return _developerProjectsInFlight[cacheKey]!;
+    }
+
+    final future = _fetchDeveloperProjects(developerId, cacheKey).whenComplete(() {
+      _developerProjectsInFlight.remove(cacheKey);
+    });
+    _developerProjectsInFlight[cacheKey] = future;
+    return future;
+  }
+
+  Future<List<ProjectModel>> _fetchDeveloperProjects(String developerId, String cacheKey) async {
     try {
       print('═══════════════════════════════════════════════════════════');
       print('📡 GET DEVELOPER PROJECTS - START');
@@ -925,26 +1007,6 @@ class ProjectApi {
       print('📦 Response Data Type: ${response.data.runtimeType}');
       print('');
 
-      // Print full response with JSON formatting
-      print('📋 FULL RESPONSE DATA:');
-      print('───────────────────────────────────────────────────────────');
-      try {
-        // Try to format as JSON if it's a Map or List
-        if (response.data is Map || response.data is List) {
-          final encoder = JsonEncoder.withIndent('  ');
-          print(encoder.convert(response.data));
-        } else {
-          print(response.data.toString());
-        }
-      } catch (e) {
-        print(response.data.toString());
-      }
-      print('───────────────────────────────────────────────────────────');
-      print('');
-
-      // Handle response format:
-      // - /projects/developer returns array directly: [...]
-      // - /developer/me/projects returns: { message, projects: [...], developer: {...} }
       List<dynamic> projectsList = [];
 
       if (response.data is List) {
@@ -964,106 +1026,42 @@ class ProjectApi {
             projectsList = dataValue;
             print('📋 Found "data" key in response');
           }
-        } else {
-          // If response is a Map but no 'projects' key, check if it's a list of projects
-          print(
-              '⚠️ Response is Map but no "projects" key found. Keys: ${data.keys.toList()}');
         }
       }
 
       print('📊 Parsed Projects List Length: ${projectsList.length}');
       print('');
 
-      if (projectsList.isNotEmpty) {
-        print('📋 First Project Structure:');
-        print('   Type: ${projectsList[0].runtimeType}');
-        if (projectsList[0] is Map) {
-          final firstProject = projectsList[0] as Map<String, dynamic>;
-          print('   Keys: ${firstProject.keys.toList()}');
-          if (firstProject.containsKey('developer')) {
-            print('   Developer field: ${firstProject['developer']}');
-            print(
-                '   Developer type: ${firstProject['developer'].runtimeType}');
-          }
-          if (firstProject.containsKey('_id')) {
-            print('   _id: ${firstProject['_id']}');
-          }
-          if (firstProject.containsKey('title')) {
-            print('   title: ${firstProject['title']}');
-          }
-        }
-        print('');
-      }
-
       // Parse projects
       final projects = <ProjectModel>[];
+      final rawList = <Map<String, dynamic>>[];
       for (var i = 0; i < projectsList.length; i++) {
         try {
           final projectData = projectsList[i] as Map<String, dynamic>;
           final project = ProjectModel.fromJson(projectData);
           projects.add(project);
+          rawList.add(projectData);
           print(
               '✅ [$i] Parsed: ${project.title} (ID: ${project.id}, DevID: ${project.developerId})');
-        } catch (parseError, stackTrace) {
+        } catch (parseError) {
           print('⚠️ Error parsing project at index $i: $parseError');
-          print('   Data: ${projectsList[i]}');
-          print('   Stack: $stackTrace');
         }
-      }
-
-      print('');
-      print('✅ Total Parsed Projects: ${projects.length}');
-      print('');
-
-      // Print all project titles
-      if (projects.isNotEmpty) {
-        print('📋 All Projects:');
-        for (var i = 0; i < projects.length; i++) {
-          final project = projects[i];
-          print('   [$i] ${project.title} (DevID: "${project.developerId}")');
-        }
-        print('');
       }
 
       print('═══════════════════════════════════════════════════════════');
       print('📡 GET DEVELOPER PROJECTS - END');
       print('═══════════════════════════════════════════════════════════');
-      print('');
+
+      if (rawList.isNotEmpty) {
+        await CacheManager.set(cacheKey, rawList, duration: const Duration(minutes: 5));
+      }
 
       return projects;
     } on DioException catch (e) {
-      print('═══════════════════════════════════════════════════════════');
-      print('❌ ERROR GETTING DEVELOPER PROJECTS');
-      print('═══════════════════════════════════════════════════════════');
-      print('Error: ${e.message}');
-      print('Type: ${e.type}');
-      if (e.response != null) {
-        print('Status: ${e.response?.statusCode}');
-        print('Response Data:');
-        print(e.response?.data);
-
-        // Handle specific error cases
-        if (e.response?.statusCode == 401) {
-          print(
-              '⚠️ 401 Unauthorized - User may not be authenticated or not a developer');
-        } else if (e.response?.statusCode == 403) {
-          print('⚠️ 403 Forbidden - User may not have developer permissions');
-        } else if (e.response?.statusCode == 404) {
-          print(
-              '⚠️ 404 Not Found - Endpoint may not exist or user has no projects');
-        }
-      }
-      print('═══════════════════════════════════════════════════════════');
-      print('');
+      print('❌ ERROR GETTING DEVELOPER PROJECTS: ${e.message}');
       return [];
-    } catch (e, stackTrace) {
-      print('═══════════════════════════════════════════════════════════');
-      print('❌ UNEXPECTED ERROR GETTING DEVELOPER PROJECTS');
-      print('═══════════════════════════════════════════════════════════');
-      print('Error: $e');
-      print('Stack Trace: $stackTrace');
-      print('═══════════════════════════════════════════════════════════');
-      print('');
+    } catch (e) {
+      print('❌ UNEXPECTED ERROR GETTING DEVELOPER PROJECTS: $e');
       return [];
     }
   }
@@ -1332,7 +1330,12 @@ class ProjectApi {
         '/projects/$projectId',
         data: {'script': script},
       );
-      return response.statusCode == 200 || response.statusCode == 201;
+      final success = response.statusCode == 200 || response.statusCode == 201;
+      if (success) {
+        await CacheManager.clear('project_raw_json_$projectId');
+        await CacheManager.clear('developer_projects_');
+      }
+      return success;
     } on DioException catch (e) {
       print('⚠️ Error updating project script: ${e.message}');
       if (e.response != null) {

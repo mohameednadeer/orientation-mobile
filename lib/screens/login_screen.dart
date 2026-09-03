@@ -24,6 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
   
   bool _isLoading = false;
   String? _errorMessage;
+  String? _passwordError;
 
   static const Color brandRed = Color(0xFFE50914);
 
@@ -40,6 +41,9 @@ class _LoginScreenState extends State<LoginScreen> {
     if (email.isEmpty || _passwordController.text.isEmpty) {
       setState(() {
         _errorMessage = 'Please enter email and password';
+        if (_passwordController.text.isEmpty) {
+          _passwordError = 'Password is required';
+        }
       });
       return;
     }
@@ -51,12 +55,15 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    // 1. Clear state/errors before API call starts
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _passwordError = null;
     });
 
     try {
+      // 2. Perform API call
       await _authApi.login(
         _emailController.text.trim(),
         _passwordController.text,
@@ -72,8 +79,11 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     } catch (e) {
+      final errStr = e.toString().replaceAll('Exception: ', '');
+      // 3. Catch error and set password error to trigger red border
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = errStr.isNotEmpty ? errStr : 'Invalid credentials';
+        _passwordError = 'Invalid credentials';
       });
     } finally {
       if (mounted) {
@@ -146,6 +156,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       prefixIcon: Icons.lock_outline,
                       isPassword: true,
                       controller: _passwordController,
+                      errorText: _passwordError,
+                      onChanged: (value) {
+                        if (_passwordError != null) {
+                          setState(() {
+                            _passwordError = null;
+                          });
+                        }
+                      },
                     ),
                     const SizedBox(height: 12),
                     // Forgot password link

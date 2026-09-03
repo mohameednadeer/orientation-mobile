@@ -310,7 +310,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
     if (widget.projectId == null) return;
     try {
       // Re-fetch project details & check subscription status
-      final detailsFuture = ProjectService.getProjectDetails(widget.projectId!);
+      final detailsFuture = ProjectService.getProjectDetails(widget.projectId!, forceRefresh: true);
       final subFuture = SubscriptionService.checkMySubscription();
       
       // Wait for both to complete
@@ -364,29 +364,36 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
     }
 
     try {
-      // Step 1: Fire main project fetch and independent sub-fetches in parallel
-      final projectFuture = _projectApi.getProjectById(widget.projectId!);
-      final detailsFuture = ProjectService.getProjectDetails(widget.projectId!);
+      // Step 1: Fire main project fetch (single raw JSON fetch) and independent sub-fetches in parallel
+      final projectRawFuture = _projectApi.getProjectRawJson(widget.projectId!);
       final clipsFuture = _clipService.getProjectClips(widget.projectId!);
       final pdfFilesFuture = _projectApi.getPdfFiles(widget.projectId!);
       final isSavedFuture = _projectApi.isProjectSaved(widget.projectId!);
       final inventoryFuture = _projectApi.getInventoryUrl(widget.projectId!);
 
       final results = await Future.wait([
-        projectFuture,
-        detailsFuture,
+        projectRawFuture,
         clipsFuture,
         pdfFilesFuture,
         isSavedFuture,
         inventoryFuture,
       ]);
 
-      final project = results[0] as ProjectModel?;
-      final projectDetails = results[1] as ProjectDetails;
-      final clips = results[2] as List<ClipModel>;
-      final pdfFiles = results[3] as List<PdfFileModel>;
-      final isSaved = results[4] as bool;
-      final inventoryUrl = results[5] as String?;
+      final rawJson = results[0] as Map<String, dynamic>?;
+      final project = rawJson != null ? ProjectModel.fromJson(rawJson) : null;
+      final projectDetails = rawJson != null
+          ? ProjectDetails.fromJson(rawJson)
+          : ProjectDetails(
+              id: widget.projectId!,
+              title: '',
+              slug: '',
+              hasAccess: false,
+              episodes: [],
+            );
+      final clips = results[1] as List<ClipModel>;
+      final pdfFiles = results[2] as List<PdfFileModel>;
+      final isSaved = results[3] as bool;
+      final inventoryUrl = results[4] as String?;
 
       // Step 2: Only developer projects depend on project.developerId
       List<ProjectModel> relatedProjects = [];

@@ -390,6 +390,7 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
     required String hint,
     bool isPassword = false,
     TextInputType keyboardType = TextInputType.text,
+    String? errorText,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -414,6 +415,13 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
             fontSize: 14,
           ),
           border: InputBorder.none,
+          errorText: errorText,
+          errorBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.red, width: 1.5),
+          ),
+          focusedErrorBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.red, width: 2.0),
+          ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 16,

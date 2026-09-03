@@ -201,24 +201,30 @@ class ReelsScreenState extends State<ReelsScreen>
     final saved = _savedReelIds[clip.id] ?? false;
     debugPrint('💾 Current saved status: $saved for clip: ${clip.id}');
 
+    // Optimistic UI update
+    _savedReelIds[clip.id] = !saved;
+    if (mounted) setState(() {});
+
     try {
+      bool success = false;
       if (saved) {
         debugPrint('🗑️ Unsaving reel...');
-        await _clipService!.unsaveReel(clip.id);
-        _savedReelIds[clip.id] = false;
-        debugPrint('✅ Reel unsaved');
+        success = await _clipService!.unsaveReel(clip.id);
       } else {
         debugPrint('💾 Saving reel...');
-        await _clipService!.saveReel(clip.id);
-        _savedReelIds[clip.id] = true;
-        debugPrint('✅ Reel saved');
+        success = await _clipService!.saveReel(clip.id);
       }
-      if (mounted) {
-        setState(() {});
-        debugPrint('✅ State updated');
+
+      if (!success) {
+        // Revert on API failure
+        _savedReelIds[clip.id] = saved;
+        if (mounted) setState(() {});
+        debugPrint('⚠️ Save/unsave API returned false — reverted local state');
       }
     } catch (e) {
       debugPrint('❌ Error in _toggleSave: $e');
+      _savedReelIds[clip.id] = saved;
+      if (mounted) setState(() {});
     }
   }
 

@@ -145,14 +145,15 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
   }
 
   Future<void> _handleBookmark(ProjectModel project) async {
+    final isSaved = _savedProjects[project.id] ?? false;
+    setState(() {
+      _savedProjects[project.id] = !isSaved;
+    });
+
     try {
-      final isSaved = await _projectApi.isProjectSaved(project.id);
       if (isSaved) {
         await _projectApi.unsaveProject(project.id);
         if (mounted) {
-          setState(() {
-            _savedProjects[project.id] = false;
-          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Removed from saved'),
@@ -163,9 +164,6 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
       } else {
         await _projectApi.saveProject(project.id);
         if (mounted) {
-          setState(() {
-            _savedProjects[project.id] = true;
-          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Saved!'),
@@ -176,6 +174,9 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
       }
     } catch (e) {
       if (mounted) {
+        setState(() {
+          _savedProjects[project.id] = isSaved;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: ${e.toString()}'),
@@ -323,7 +324,7 @@ ${project.script ?? 'Check out this amazing project!'}
           ),
           const SizedBox(width: 8),
           Text(
-            '(${widget.resultCount} Orientation)',
+            '(${_projects.length} Orientation)',
             style: const TextStyle(
               color: brandRed,
               fontSize: 14,

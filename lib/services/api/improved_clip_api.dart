@@ -235,49 +235,7 @@ class ImprovedClipApi {
     }
 
     try {
-      // Try server-side filtering first (if backend supports projectId param)
-      try {
-        final response = await _dioClient.dio.get(
-          '/reels',
-          queryParameters: {
-            'projectId': projectId,
-            'page': page,
-            'limit': limit,
-          },
-        );
-        List<dynamic> list;
-        if (response.data is List) {
-          list = response.data as List;
-        } else if (response.data is Map<String, dynamic>) {
-          final map = response.data as Map<String, dynamic>;
-          list = (map['reels'] as List<dynamic>?) ??
-              (map['value'] as List<dynamic>?) ??
-              (map['data'] as List<dynamic>?) ??
-              (map['clips'] as List<dynamic>?) ??
-              <dynamic>[];
-        } else {
-          list = <dynamic>[];
-        }
-        if (list.isNotEmpty) {
-          final clips = list
-              .map((e) => ClipModel.fromJson(e as Map<String, dynamic>))
-              .toList();
-          for (var clip in clips) {
-            _clipCache.put(clip.id, clip);
-            _updateCacheTimestamp(clip.id);
-          }
-          _pageCache.put(cacheKey, clips);
-          _updatePageCacheTimestamp(cacheKey);
-          await _syncLikedStatus(clips);
-          debugPrint(
-              '✅ ImprovedClipApi: Fetched ${clips.length} clips for project $projectId (server-side)');
-          return clips;
-        }
-      } on DioException catch (_) {
-        // Backend may not support projectId - fall through to local filter
-      }
-
-      // Fallback: fetch and filter locally (when backend has no projectId support)
+      // Fetch full catalog (cached for 5 min in getAllClips) and filter locally
       final allClips =
           await getAllClips(page: 1, limit: 1000, forceRefresh: forceRefresh);
       final filtered =

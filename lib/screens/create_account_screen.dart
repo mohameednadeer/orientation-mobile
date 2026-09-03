@@ -24,6 +24,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   String _fullPhoneNumber = '';
   bool _isLoading = false;
   String? _errorMessage;
+  String? _passwordError;
 
   static const Color brandRed = Color(0xFFE50914);
 
@@ -79,6 +80,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     if (_passwordController.text.isEmpty) {
       setState(() {
         _errorMessage = 'Please enter your password';
+        _passwordError = 'Password is required';
       });
       return;
     }
@@ -86,6 +88,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     if (!Validators.isPassword(_passwordController.text)) {
       setState(() {
         _errorMessage = 'Password must be at least 8 characters';
+        _passwordError = 'Password must be at least 8 characters';
       });
       return;
     }
@@ -93,6 +96,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _passwordError = null;
     });
 
     try {
@@ -119,8 +123,12 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         ),
       );
     } catch (e) {
+      final errStr = e.toString().replaceAll('Exception: ', '');
       setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        _errorMessage = errStr;
+        if (errStr.toLowerCase().contains('password')) {
+          _passwordError = errStr;
+        }
       });
     } finally {
       if (mounted) {
@@ -244,6 +252,14 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                       prefixIcon: Icons.lock_outline,
                       isPassword: true,
                       controller: _passwordController,
+                      errorText: _passwordError,
+                      onChanged: (value) {
+                        if (_passwordError != null) {
+                          setState(() {
+                            _passwordError = null;
+                          });
+                        }
+                      },
                     ),
                     // Error message
                     if (_errorMessage != null) ...[

@@ -30,19 +30,36 @@ class WatchHistoryApi {
     int? episode,
   }) async {
     invalidateCache();
+
+    // Sanitize parameters to conform strictly to backend DTO specs:
+    // currentTime >= 0, duration >= 1
+    final sanitizedCurrentTime = currentTimeSeconds < 0 ? 0.0 : currentTimeSeconds;
+    final sanitizedDuration = durationSeconds < 1.0 ? 1.0 : durationSeconds;
+
+    // Filter contentThumbnail to only include valid HTTP/HTTPS URLs
+    final isValidUrl = contentThumbnail != null &&
+        contentThumbnail.isNotEmpty &&
+        (contentThumbnail.startsWith('http://') || contentThumbnail.startsWith('https://'));
+
+    final effectiveType = (contentType != null && contentType.isNotEmpty) ? contentType : 'episode';
+    final effectiveSeason = season ?? (effectiveType == 'episode' ? 1 : null);
+    final effectiveEpisode = (episode != null && episode > 0) ? episode : (effectiveType == 'episode' ? 1 : null);
+
+    final payload = <String, dynamic>{
+      'contentId': contentId,
+      'contentTitle': contentTitle,
+      if (isValidUrl) 'contentThumbnail': contentThumbnail,
+      'currentTime': sanitizedCurrentTime,
+      'duration': sanitizedDuration,
+      'contentType': effectiveType,
+      if (effectiveSeason != null) 'season': effectiveSeason,
+      if (effectiveEpisode != null) 'episode': effectiveEpisode,
+    };
+
     try {
       final response = await _dioClient.dio.post(
         '/watch-history/progress',
-        data: {
-          'contentId': contentId,
-          'contentTitle': contentTitle,
-          if (contentThumbnail != null && contentThumbnail.isNotEmpty) 'contentThumbnail': contentThumbnail,
-          'currentTime': currentTimeSeconds,
-          'duration': durationSeconds,
-          if (contentType != null && contentType.isNotEmpty) 'contentType': contentType,
-          if (season != null) 'season': season,
-          if (episode != null) 'episode': episode,
-        },
+        data: payload,
       );
 
       final data = response.data as Map<String, dynamic>?;
@@ -56,6 +73,10 @@ class WatchHistoryApi {
       }
       throw Exception('Invalid watch history response');
     } on DioException catch (e) {
+      print('❌ DioException in upsertProgress:');
+      print('   Status: ${e.response?.statusCode}');
+      print('   Response data: ${e.response?.data}');
+      print('   Payload sent: $payload');
       throw _handleError(e);
     }
   }

@@ -50,7 +50,7 @@ class _AccountScreenState extends State<AccountScreen> {
         if (firstName.isNotEmpty || lastName.isNotEmpty) {
           _userName = '$firstName $lastName'.trim();
         } else {
-          _userName = userInfo['username'] ?? 'User';
+          _userName = userInfo['username'] ?? 'Guest';
         }
         _userEmail = userInfo['email'] ?? '';
         _userRole = userInfo['role'] ?? 'user';
@@ -71,7 +71,7 @@ class _AccountScreenState extends State<AccountScreen> {
           } else if (username.isNotEmpty) {
             _userName = username;
           } else {
-            _userName = 'User';
+            _userName = 'Guest';
           }
           _userEmail = freshProfile['email'] ?? _userEmail;
         });
