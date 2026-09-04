@@ -22,7 +22,7 @@ class ApiConfig {
 
   // ── Base URLs ──────────────────────────────────────────────────────────────
 
-  /// Production base URL.
+  /// Production base URL (active live backend).
   static const String productionUrl = 'https://api.orientationapps.com/api/v1';
 
   /// Local development URL (Android emulator uses 10.0.2.2 instead of localhost).
@@ -30,6 +30,9 @@ class ApiConfig {
 
   /// Staging URL (update when you have one).
   static const String stagingUrl = 'https://staging.orientationapps.com';
+
+  /// Web checkout / subscription URL (used for subscription purchases).
+  static const String checkoutUrl = 'https://orientationapps.com/checkout';
 
   // ── Active URL — resolved at compile time via --dart-define ───────────────
   //

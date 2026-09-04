@@ -25,8 +25,17 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   String? _passwordError;
+  // Feature flag: set to true to re-enable Facebook login UI
+  final bool _showFacebookLogin = false;
 
   static const Color brandRed = Color(0xFFE50914);
+
+  @override
+  void initState() {
+    super.initState();
+    _passwordError = null;
+    _errorMessage = null;
+  }
 
   @override
   void dispose() {
@@ -148,6 +157,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         prefixIcon: Icons.email_outlined,
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
+                        autovalidateMode: AutovalidateMode.onUserInteraction,
+                        onChanged: (value) {
+                          if (_errorMessage != null) {
+                            setState(() {
+                              _errorMessage = null;
+                            });
+                          }
+                        },
                       ),
                     const SizedBox(height: 16),
                     // Password field
@@ -157,6 +174,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       isPassword: true,
                       controller: _passwordController,
                       errorText: _passwordError,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       onChanged: (value) {
                         if (_passwordError != null) {
                           setState(() {
@@ -317,22 +335,38 @@ class _LoginScreenState extends State<LoginScreen> {
                                 defaultIcon: Icons.g_mobiledata_rounded,
                                 onPressed: isAnyLoading 
                                     ? null 
-                                    : () => authController.signInWithGoogle(),
+                                    : () async {
+                                        debugPrint('🔘🔘🔘 [LoginScreen] "Continue with Google" button pressed 🔘🔘🔘');
+                                        try {
+                                          await authController.signInWithGoogle();
+                                        } catch (e, stackTrace) {
+                                          debugPrint('❌ [LoginScreen] Unhandled Google button error: $e');
+                                          debugPrint('❌ [LoginScreen] StackTrace: $stackTrace');
+                                          Get.snackbar(
+                                            'Sign-In Error',
+                                            e.toString(),
+                                            snackPosition: SnackPosition.BOTTOM,
+                                            backgroundColor: const Color(0xFFD32F2F),
+                                            colorText: Colors.white,
+                                          );
+                                        }
+                                      },
                                 isLoading: authController.isGoogleLoading.value,
                               ),
-                              const SizedBox(height: 16),
-                              
-                              // Facebook Button
-                              _buildSocialButton(
-                                title: 'Continue with Facebook',
-                                iconPath: 'assets/icons/facebook_icon.png',
-                                defaultIcon: Icons.facebook_rounded,
-                                onPressed: isAnyLoading 
-                                    ? null 
-                                    : () => authController.signInWithFacebook(),
-                                isLoading: authController.isFacebookLoading.value,
-                                isFacebook: true,
-                              ),
+                              // Facebook Button (temporarily hidden from UI, auth logic kept intact)
+                              if (_showFacebookLogin) ...[
+                                const SizedBox(height: 16),
+                                _buildSocialButton(
+                                  title: 'Continue with Facebook',
+                                  iconPath: 'assets/icons/facebook_icon.png',
+                                  defaultIcon: Icons.facebook_rounded,
+                                  onPressed: isAnyLoading 
+                                      ? null 
+                                      : () => authController.signInWithFacebook(),
+                                  isLoading: authController.isFacebookLoading.value,
+                                  isFacebook: true,
+                                ),
+                              ],
                             ],
                           );
                         }

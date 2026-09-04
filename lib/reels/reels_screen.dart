@@ -3,7 +3,9 @@ import 'package:get/get.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import '../models/clip_model.dart';
+import '../models/project_model.dart';
 import '../services/clip_service.dart';
+import '../services/api/project_api.dart';
 import '../utils/auth_helper.dart';
 import '../screens/main_screen.dart';
 import '../screens/project_details_screen.dart';
@@ -62,6 +64,18 @@ class ReelsScreenState extends State<ReelsScreen>
     final modalRoute = ModalRoute.of(context);
     if (modalRoute != null) {
       routeObserver.subscribe(this, modalRoute);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ReelsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.clips != widget.clips) {
+      _loadSavedStatus();
+      if (_currentIndex >= widget.clips.length) {
+        _currentIndex = (widget.clips.length - 1).clamp(0, double.infinity).toInt();
+      }
+      if (mounted) setState(() {});
     }
   }
 
@@ -529,88 +543,10 @@ class _ReelPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                children: [
-                  // Small circular avatar - smaller (clickable)
-                  GestureDetector(
-                    onTap: onProjectTap,
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A2A), // Dark grey background
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.3), // Light grey border
-                          width: 1,
-                        ),
-                      ),
-                      child: Center(
-                        child: Icon(
-                          Icons.person_outline,
-                          color: Colors.white,
-                          size: 18,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Username beside avatar - limited width to prevent pushing button away (clickable)
-                  Flexible(
-                    child: GestureDetector(
-                      onTap: onProjectTap,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width * 0.35,
-                        ),
-                        child: const Text(
-                          'User',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  // Watch Orientation button - smaller, next to username
-                  GestureDetector(
-                    onTap: onEpisodesTap,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: brandRed,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.play_arrow,
-                            color: Colors.white,
-                            size: 12,
-                          ),
-                          SizedBox(width: 3),
-                          Text(
-                            'Watch Orientation',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+              _ProjectInfoBar(
+                clip: clip,
+                onProjectTap: onProjectTap,
+                onEpisodesTap: onEpisodesTap,
               ),
               const SizedBox(height: 6),
               // Text caption under username
@@ -731,6 +667,189 @@ class _LabeledActionButton extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Dynamic Project Info Bar that displays the Project Name and Project Logo
+class _ProjectInfoBar extends StatefulWidget {
+  final ClipModel clip;
+  final VoidCallback onProjectTap;
+  final VoidCallback onEpisodesTap;
+
+  const _ProjectInfoBar({
+    required this.clip,
+    required this.onProjectTap,
+    required this.onEpisodesTap,
+  });
+
+  @override
+  State<_ProjectInfoBar> createState() => _ProjectInfoBarState();
+}
+
+class _ProjectInfoBarState extends State<_ProjectInfoBar> {
+  static final Map<String, ProjectModel> _projectCache = {};
+  static final ProjectApi _projectApi = ProjectApi();
+  ProjectModel? _resolvedProject;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveProject();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProjectInfoBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.clip.id != widget.clip.id ||
+        oldWidget.clip.projectId != widget.clip.projectId) {
+      _resolveProject();
+    }
+  }
+
+  void _resolveProject() {
+    final pid = widget.clip.projectId;
+    if (pid.isEmpty) return;
+
+    if (_projectCache.containsKey(pid)) {
+      _resolvedProject = _projectCache[pid];
+      return;
+    }
+
+    _projectApi.getProjectById(pid).then((p) {
+      if (p != null && mounted) {
+        _projectCache[pid] = p;
+        setState(() {
+          _resolvedProject = p;
+        });
+      }
+    }).catchError((_) {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 1. Resolve Project Name:
+    // Priority: clip.projectName -> _resolvedProject.title -> clip.developerName (if not 'User')
+    String name = widget.clip.projectName.isNotEmpty
+        ? widget.clip.projectName
+        : (_resolvedProject != null && _resolvedProject!.title.isNotEmpty
+            ? _resolvedProject!.title
+            : (widget.clip.developerName.isNotEmpty && widget.clip.developerName != 'User'
+                ? widget.clip.developerName
+                : ''));
+
+    // 2. Resolve Project Logo:
+    // Priority: clip.projectLogo -> _resolvedProject.logo -> _resolvedProject.projectThumbnailUrl -> clip.developerLogo
+    String logo = widget.clip.projectLogo.isNotEmpty
+        ? widget.clip.projectLogo
+        : (_resolvedProject?.logo != null && _resolvedProject!.logo!.isNotEmpty
+            ? _resolvedProject!.logo!
+            : (_resolvedProject != null && _resolvedProject!.projectThumbnailUrl.isNotEmpty
+                ? _resolvedProject!.projectThumbnailUrl
+                : widget.clip.developerLogo));
+
+    return Row(
+      children: [
+        // Small circular avatar - uses project logo with fallback
+        GestureDetector(
+          onTap: widget.onProjectTap,
+          child: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: const Color(0xFF2A2A2A),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: ClipOval(
+              child: logo.isNotEmpty
+                  ? Image.network(
+                      logo,
+                      width: 32,
+                      height: 32,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Center(
+                          child: Icon(
+                            Icons.apartment_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        );
+                      },
+                    )
+                  : const Center(
+                      child: Icon(
+                        Icons.apartment_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+            ),
+          ),
+        ),
+        if (name.isNotEmpty) ...[
+          const SizedBox(width: 8),
+          // Project name beside logo (clickable)
+          Flexible(
+            child: GestureDetector(
+              onTap: widget.onProjectTap,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.38,
+                ),
+                child: Text(
+                  name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(width: 6),
+        // Watch Orientation button
+        GestureDetector(
+          onTap: widget.onEpisodesTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 5,
+            ),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE50914),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.play_arrow,
+                  color: Colors.white,
+                  size: 12,
+                ),
+                SizedBox(width: 3),
+                Text(
+                  'Watch Orientation',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

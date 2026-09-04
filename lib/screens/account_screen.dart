@@ -31,6 +31,7 @@ class _AccountScreenState extends State<AccountScreen> {
   String _userName = 'User';
   String _userEmail = '';
   String _userRole = 'user';
+  String _userProfilePicture = '';
   bool _isLoading = true;
 
   @override
@@ -54,6 +55,7 @@ class _AccountScreenState extends State<AccountScreen> {
         }
         _userEmail = userInfo['email'] ?? '';
         _userRole = userInfo['role'] ?? 'user';
+        _userProfilePicture = userInfo['profilePicture'] ?? '';
         _isLoading = false;
       });
     }
@@ -70,10 +72,10 @@ class _AccountScreenState extends State<AccountScreen> {
             _userName = '$firstName $lastName'.trim();
           } else if (username.isNotEmpty) {
             _userName = username;
-          } else {
-            _userName = 'Guest';
           }
+          // Don't overwrite a valid name with 'Guest'
           _userEmail = freshProfile['email'] ?? _userEmail;
+          _userProfilePicture = freshProfile['profilePicture'] ?? _userProfilePicture;
         });
       }
     } catch (e) {
@@ -382,14 +384,38 @@ class _AccountScreenState extends State<AccountScreen> {
           Container(
             width: 80,
             height: 80,
-            decoration: const BoxDecoration(
-              color: Color(0xFF1a1a1a),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1a1a1a),
               shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withOpacity(0.15),
+                width: 1.5,
+              ),
             ),
-            child: const Icon(
-              Icons.person,
-              color: Colors.white,
-              size: 45,
+            child: ClipOval(
+              child: _userProfilePicture.isNotEmpty
+                  ? Image.network(
+                      _userProfilePicture,
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Center(
+                          child: Icon(
+                            Icons.person,
+                            color: Colors.white,
+                            size: 45,
+                          ),
+                        );
+                      },
+                    )
+                  : const Center(
+                      child: Icon(
+                        Icons.person,
+                        color: Colors.white,
+                        size: 45,
+                      ),
+                    ),
             ),
           ),
           const SizedBox(height: 16),

@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/social_auth_service.dart';
 import '../services/dio_client.dart';
 import '../models/user_model.dart';
+import '../core/api_client.dart';
+import '../services/subscription_service.dart';
 import '../screens/main_screen.dart';
 
 class AuthController extends GetxController {
@@ -19,28 +23,44 @@ class AuthController extends GetxController {
       isGoogleLoading.value = true;
       isLoading.value = true;
       errorMessage.value = '';
+      debugPrint('🔵 [AuthController] signInWithGoogle() started');
 
       final idToken = await _socialAuthService.signInWithGoogle();
+      debugPrint('🔵 [AuthController] idToken received: ${idToken != null ? "present (${idToken.length} chars)" : "NULL"}');
+
       if (idToken == null) {
-        isGoogleLoading.value = false;
-        isLoading.value = false;
-        return; // User canceled
+        debugPrint('🔵 [AuthController] Google sign-in was canceled or returned no account.');
+        Get.snackbar(
+          'Google Sign-In',
+          'Sign-in was canceled or no Google account was selected.',
+          snackPosition: SnackPosition.BOTTOM,
+          duration: const Duration(seconds: 3),
+        );
+        return;
       }
 
+      debugPrint('🔵 [AuthController] Sending idToken to backend /auth/google/mobile ...');
       await _sendTokenToBackend('/auth/google', idToken);
-    } catch (e) {
-      final errorStr = e.toString().toLowerCase();
-      if (errorStr.contains('cancel')) {
-        isGoogleLoading.value = false;
-        isLoading.value = false;
-        return; // User canceled, suppress error
-      }
-      errorMessage.value = 'Failed to sign in with Google. Please try again.';
-      Get.snackbar('Google Login Failed', errorMessage.value,
-          snackPosition: SnackPosition.BOTTOM);
+      debugPrint('✅ [AuthController] Google sign-in complete!');
+    } catch (e, stackTrace) {
+      debugPrint('❌❌❌ [AuthController] signInWithGoogle ERROR: $e');
+      debugPrint('❌❌❌ [AuthController] ERROR TYPE: ${e.runtimeType}');
+      debugPrint('❌❌❌ [AuthController] STACK TRACE: $stackTrace');
+
+      final errorMsg = e.toString().replaceFirst('Exception: ', '');
+      errorMessage.value = errorMsg;
+      Get.snackbar(
+        'Google Login Failed',
+        errorMsg,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFD32F2F),
+        colorText: const Color(0xFFFFFFFF),
+        duration: const Duration(seconds: 5),
+      );
     } finally {
       isGoogleLoading.value = false;
       isLoading.value = false;
+      debugPrint('🔵 [AuthController] Reset isGoogleLoading to false');
     }
   }
 
@@ -82,15 +102,23 @@ class AuthController extends GetxController {
         payload = {'accessToken': token};
       }
 
+      debugPrint('🔵 [AuthController] POST $resolvedEndpoint');
       final response = await _dioClient.dio.post(
         resolvedEndpoint,
         data: payload,
       );
 
       final data = response.data as Map<String, dynamic>;
+      debugPrint('🔵 [AuthController] Backend response keys: ${data.keys.toList()}');
+      debugPrint('🔵 [AuthController] Backend response: $data');
+
       final accessToken = data['accessToken']?.toString() ?? data['token']?.toString() ?? '';
       final refreshToken = data['refreshToken']?.toString() ?? '';
       final userId = data['id']?.toString() ?? '';
+
+      debugPrint('🔵 [AuthController] accessToken: ${accessToken.isNotEmpty ? "present" : "EMPTY"}');
+      debugPrint('🔵 [AuthController] refreshToken: ${refreshToken.isNotEmpty ? "present" : "EMPTY"}');
+      debugPrint('🔵 [AuthController] userId: $userId');
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('auth_token', accessToken);
@@ -99,9 +127,36 @@ class AuthController extends GetxController {
       // Fetch profile to get full user model details
       UserModel user;
       try {
+        debugPrint('🔵 [AuthController] Fetching /users/profile after social login...');
         final profileResponse = await _dioClient.dio.get('/users/profile');
-        user = UserModel.fromJson(profileResponse.data as Map<String, dynamic>);
+        debugPrint('🔵 [AuthController] Profile response: ${profileResponse.data}');
+        
+        // Unwrap 'user' key if present (same pattern as auth_api.dart)
+        final responseData = profileResponse.data;
+        Map<String, dynamic> profileMap = {};
+        if (responseData is Map<String, dynamic>) {
+          if (responseData.containsKey('user') && responseData['user'] is Map) {
+            profileMap = Map<String, dynamic>.from(responseData['user'] as Map);
+          } else if (responseData.containsKey('value') && responseData['value'] is Map) {
+            profileMap = Map<String, dynamic>.from(responseData['value'] as Map);
+          } else if (responseData.containsKey('data') && responseData['data'] is Map) {
+            profileMap = Map<String, dynamic>.from(responseData['data'] as Map);
+          } else {
+            profileMap = responseData;
+          }
+        }
+        user = UserModel.fromJson(profileMap);
+        final pFirstName = profileMap['firstName']?.toString() ?? '';
+        final pLastName = profileMap['lastName']?.toString() ?? '';
+        final pProfilePicture = profileMap['profilePicture']?.toString()
+            ?? profileMap['avatar']?.toString()
+            ?? profileMap['photo']?.toString()
+            ?? '';
+        if (pFirstName.isNotEmpty) await prefs.setString('user_first_name', pFirstName);
+        if (pLastName.isNotEmpty) await prefs.setString('user_last_name', pLastName);
+        if (pProfilePicture.isNotEmpty) await prefs.setString('user_profile_picture', pProfilePicture);
       } catch (e) {
+        debugPrint('⚠️ [AuthController] Profile fetch failed: $e');
         // Fallback: construct skeleton UserModel
         user = UserModel(
           id: userId,
@@ -119,9 +174,35 @@ class AuthController extends GetxController {
         await prefs.setString('user_phone', user.phoneNumber!);
       }
 
-      // Navigate to Home Feed
+      // Also save to ApiClient (FlutterSecureStorage) for global interceptors
+      try {
+        await ApiClient.saveTokens(accessToken: accessToken, refreshToken: refreshToken);
+        debugPrint('✅ [AuthController] Saved tokens to ApiClient secure storage');
+      } catch (storageErr) {
+        debugPrint('⚠️ [AuthController] ApiClient saveTokens non-fatal error: $storageErr');
+      }
+
+      // Cache subscription status immediately if user is subscribed
+      if (user.isSubscribed) {
+        await SubscriptionService.cacheSubscriptionStatus(
+          UserSubscriptionStatus(
+            hasAccess: true,
+            status: user.subscriptionStatus,
+            planName: user.planName,
+          ),
+        );
+      }
+
+      // Refresh subscription in the background
+      SubscriptionService.checkMySubscription(forceRefresh: true)
+          .catchError((_) => UserSubscriptionStatus(hasAccess: false));
+
+      debugPrint('✅ [AuthController] Social login stored successfully. Navigating to MainScreen...');
+      // Navigate to Main Screen
       Get.offAll(() => const MainScreen());
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('❌ [AuthController] _sendTokenToBackend ERROR: $e');
+      debugPrint('❌ [AuthController] STACK TRACE: $stackTrace');
       throw Exception('Backend authentication failed: $e');
     }
   }

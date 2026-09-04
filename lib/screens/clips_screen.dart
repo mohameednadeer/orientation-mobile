@@ -559,40 +559,53 @@ class ClipsScreenState extends State<ClipsScreen> {
     super.initState();
   }
 
-  Future<void> _loadClips() async {
+  Future<void> _loadClips({bool forceRefresh = false}) async {
     try {
+      debugPrint('🎬 [ClipsScreen] Loading clips (forceRefresh: $forceRefresh)...');
       if (!getx.Get.isRegistered<ClipService>()) {
+        debugPrint('❌ [ClipsScreen] ClipService is not registered');
         if (mounted) setState(() => _isLoading = false);
         return;
       }
       final clipService = getx.Get.find<ClipService>();
-      final clips = await clipService.getClips(page: 1, limit: 5);
+      // Use limit 50 instead of 5 so newly added reels in the database are not cut off
+      final clips = await clipService.getClips(
+        page: 1,
+        limit: 50,
+        forceRefresh: forceRefresh,
+      );
+      debugPrint('🎬 [ClipsScreen] Received ${clips.length} clips from ClipService');
       if (mounted) {
         setState(() {
           _clips = clips;
           _isLoading = false;
         });
       }
-    } catch (e) {
-      debugPrint('Error loading clips: $e');
+    } catch (e, st) {
+      debugPrint('❌ [ClipsScreen] Error loading clips: $e\n$st');
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  Future<void> refresh() async {
+    setState(() => _isLoading = true);
+    await _loadClips(forceRefresh: true);
+  }
+
   void setVisible(bool visible) {
     _reelsKey.currentState?.setVisible(visible);
-    if (visible && !_hasLoadedOnce) {
+    if (visible && (!_hasLoadedOnce || _clips.isEmpty)) {
       _hasLoadedOnce = true;
-      _loadClips();
+      _loadClips(forceRefresh: true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(
+      return const Scaffold(
         backgroundColor: Colors.black,
-        body: const Center(
+        body: Center(
             child: CircularProgressIndicator(color: Color(0xFFE50914))),
       );
     }
@@ -600,19 +613,47 @@ class ClipsScreenState extends State<ClipsScreen> {
       return Scaffold(
         backgroundColor: Colors.black,
         body: Center(
-          child: Text(
-            'No Clips Available',
-            style:
-                TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 18),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.video_library_outlined,
+                  color: Colors.white54, size: 54),
+              const SizedBox(height: 16),
+              Text(
+                'No Clips Available',
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.7), fontSize: 18),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: refresh,
+                icon: const Icon(Icons.refresh, color: Colors.white, size: 18),
+                label: const Text('Refresh Clips',
+                    style: TextStyle(color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE50914),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       );
     }
-    return ReelsScreen(
-      key: _reelsKey,
-      clips: _clips,
-      initialIndex: 0,
-      initialVisible: true,
+    return RefreshIndicator(
+      color: const Color(0xFFE50914),
+      backgroundColor: Colors.black,
+      onRefresh: refresh,
+      child: ReelsScreen(
+        key: _reelsKey,
+        clips: _clips,
+        initialIndex: 0,
+        initialVisible: true,
+      ),
     );
   }
 }

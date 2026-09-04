@@ -609,8 +609,11 @@ class ProjectApi {
       final clips = <ClipModel>[];
       for (var i = 0; i < list.length; i++) {
         try {
-          final clip = ClipModel.fromJson(list[i] as Map<String, dynamic>);
-          clips.add(clip);
+          final item = list[i];
+          if (item is Map) {
+            final clip = ClipModel.fromJson(Map<String, dynamic>.from(item));
+            clips.add(clip);
+          }
         } catch (e) {
           print('⚠️ Error parsing reel $i: $e');
           // Skip this reel but continue with others

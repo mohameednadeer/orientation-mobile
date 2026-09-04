@@ -8,6 +8,8 @@ class ClipModel {
   final bool isAsset;
   final String developerName;
   final String developerLogo;
+  final String projectName;
+  final String projectLogo;
   final int likes;
   final bool isLiked;
   final bool hasWhatsApp;
@@ -23,6 +25,8 @@ class ClipModel {
     this.isAsset = false,
     this.developerName = '',
     this.developerLogo = '',
+    this.projectName = '',
+    this.projectLogo = '',
     this.likes = 0,
     this.isLiked = false,
     this.hasWhatsApp = true,
@@ -31,38 +35,105 @@ class ClipModel {
 
   factory ClipModel.fromJson(Map<String, dynamic> json) {
     String projectId = '';
-    if (json['projectId'] != null) {
-      if (json['projectId'] is Map) {
-        projectId = json['projectId']['_id']?.toString() ??
-            json['projectId']['id']?.toString() ??
+    String projectName = '';
+    String projectLogo = '';
+
+    final rawProj = json['projectId'] ?? json['project'];
+    if (rawProj != null) {
+      if (rawProj is Map) {
+        projectId = rawProj['_id']?.toString() ??
+            rawProj['id']?.toString() ??
+            '';
+        projectName = rawProj['title']?.toString() ??
+            rawProj['name']?.toString() ??
+            rawProj['projectName']?.toString() ??
+            '';
+        projectLogo = rawProj['logo']?.toString() ??
+            rawProj['logoUrl']?.toString() ??
+            rawProj['projectThumbnailUrl']?.toString() ??
+            rawProj['image']?.toString() ??
             '';
       } else {
-        projectId = json['projectId'].toString();
+        projectId = rawProj.toString();
       }
     }
-    // developerName/developerLogo from populated developerId (API: developerId → { name, logoUrl })
+
+    // Top-level fallbacks if provided in json directly
+    if (projectName.isEmpty) {
+      projectName = json['projectName']?.toString() ??
+          json['projectTitle']?.toString() ??
+          '';
+    }
+    if (projectLogo.isEmpty) {
+      projectLogo = json['projectLogo']?.toString() ??
+          json['projectLogoUrl']?.toString() ??
+          json['logo']?.toString() ??
+          json['logoUrl']?.toString() ??
+          '';
+    }
+
+    // developerName/developerLogo from populated developerId or developer object
     String developerName = json['developerName']?.toString() ?? '';
     String developerLogo = json['developerLogo']?.toString() ?? '';
-    final dev = json['developerId'];
+    final dev = json['developerId'] ?? json['developer'];
     if (dev is Map) {
       if (developerName.isEmpty) developerName = dev['name']?.toString() ?? '';
-      if (developerLogo.isEmpty)
+      if (developerLogo.isEmpty) {
         developerLogo =
             dev['logoUrl']?.toString() ?? dev['logo']?.toString() ?? '';
+      }
     }
+
+    // Fallbacks between project and developer if one is missing
+    if (projectName.isEmpty && developerName.isNotEmpty) {
+      projectName = developerName;
+    }
+    if (projectLogo.isEmpty && developerLogo.isNotEmpty) {
+      projectLogo = developerLogo;
+    }
+
+    final videoUrl = json['videoUrl']?.toString() ??
+        json['url']?.toString() ??
+        json['video']?.toString() ??
+        json['reelUrl']?.toString() ??
+        json['video_url']?.toString() ??
+        '';
+
+    final thumbnail = json['thumbnail']?.toString() ??
+        json['thumbnailUrl']?.toString() ??
+        json['reelThumbnailUrl']?.toString() ??
+        json['coverUrl']?.toString() ??
+        json['poster']?.toString() ??
+        '';
+
+    int likes = 0;
+    if (json['likes'] != null) {
+      likes = int.tryParse(json['likes'].toString()) ?? 0;
+    } else if (json['viewCount'] != null) {
+      likes = int.tryParse(json['viewCount'].toString()) ?? 0;
+    } else if (json['saveCount'] != null) {
+      likes = int.tryParse(json['saveCount'].toString()) ?? 0;
+    }
+
+    final description = json['description']?.toString() ??
+        json['caption']?.toString() ??
+        '';
+
     return ClipModel(
       id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
       projectId: projectId,
-      title: json['title'] ?? '',
-      description: '', // not in API
-      videoUrl: json['videoUrl']?.toString() ?? '',
-      thumbnail: json['thumbnail']?.toString() ?? json['reelThumbnailUrl']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      description: description,
+      videoUrl: videoUrl,
+      thumbnail: thumbnail,
       isAsset: json['isAsset'] == true,
-      developerName: 'User',
+      developerName: developerName.isNotEmpty ? developerName : 'User',
       developerLogo: developerLogo,
-      likes: 0, // not in API (Reel has viewCount, saveCount)
-      isLiked: false, // not in API
-      hasWhatsApp: true, // not in API; default for UI
+      projectName: projectName,
+      projectLogo: projectLogo,
+      likes: likes,
+      isLiked: json['isLiked'] == true,
+      hasWhatsApp: json['hasWhatsApp'] != false, // defaults to true unless explicitly false
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())
           : null,
@@ -80,6 +151,8 @@ class ClipModel {
       'isAsset': isAsset,
       'developerName': developerName,
       'developerLogo': developerLogo,
+      'projectName': projectName,
+      'projectLogo': projectLogo,
       'likes': likes,
       'isLiked': isLiked,
       'hasWhatsApp': hasWhatsApp,
@@ -97,6 +170,8 @@ class ClipModel {
     bool? isAsset,
     String? developerName,
     String? developerLogo,
+    String? projectName,
+    String? projectLogo,
     int? likes,
     bool? isLiked,
     bool? hasWhatsApp,
@@ -112,6 +187,8 @@ class ClipModel {
       isAsset: isAsset ?? this.isAsset,
       developerName: developerName ?? this.developerName,
       developerLogo: developerLogo ?? this.developerLogo,
+      projectName: projectName ?? this.projectName,
+      projectLogo: projectLogo ?? this.projectLogo,
       likes: likes ?? this.likes,
       isLiked: isLiked ?? this.isLiked,
       hasWhatsApp: hasWhatsApp ?? this.hasWhatsApp,

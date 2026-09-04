@@ -58,12 +58,24 @@ class EpisodeItem {
         epNum = int.tryParse(orderMatch.group(0) ?? '1') ?? 1;
       }
     }
+    // Support 'locked' (backend field), 'isLocked', and free flags
+    bool isLocked = true;
+    if (json.containsKey('locked')) {
+      isLocked = json['locked'] == true;
+    } else if (json.containsKey('isLocked')) {
+      isLocked = json['isLocked'] == true;
+    } else if (json.containsKey('isFree')) {
+      isLocked = json['isFree'] != true;
+    } else if (json.containsKey('free')) {
+      isLocked = json['free'] != true;
+    }
+
     return EpisodeItem(
       id: json['_id'] ?? json['id'] ?? '',
       title: json['title'] ?? '',
       videoUrl: json['episodeUrl'] ?? json['videoUrl'],
       duration: json['duration'],
-      isLocked: json['isLocked'] ?? true, // Default to locked
+      isLocked: isLocked,
       episodeNumber: epNum,
       thumbnail: json['thumbnail'] ?? json['thumbnailUrl'],
       isAsset: json['isAsset'] ?? false,

@@ -3,6 +3,7 @@ import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../config/api_config.dart';
 import '../core/api_client.dart';
 import '../services/subscription_service.dart';
 import '../services/project_service.dart';
@@ -101,35 +102,40 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     WidgetsBinding.instance.addObserver(this);
     _featuredController.addListener(_onFeaturedScroll);
     // Load data asynchronously to avoid blocking UI
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       _loadData();
       _loadUserName();
       debugPrint('Welcome Pop-up Debug: Checking login status...');
-      ApiClient.isLoggedIn().then((isLoggedIn) {
+      try {
+        final isLoggedIn = await _authApi.isLoggedIn();
         debugPrint('Welcome Pop-up Debug: isLoggedIn = $isLoggedIn');
-        if (isLoggedIn && mounted) {
-          debugPrint('Welcome Pop-up Debug: Fetching subscription status...');
-          SubscriptionService.checkMySubscription().then((status) {
-            debugPrint('Welcome Pop-up Debug: Subscription status hasAccess = ${status.hasAccess}');
-            if (!status.hasAccess && mounted) {
-              debugPrint('Welcome Pop-up Debug: Showing welcome subscription dialog...');
-              _showWelcomeDialog();
-            } else {
-              debugPrint('Welcome Pop-up Debug: Dialog skipped (hasAccess = true or not mounted)');
-            }
-          }).catchError((error) {
-            debugPrint('Welcome Pop-up Debug: Error fetching subscription status: $error');
-            if (mounted) {
-              debugPrint('Welcome Pop-up Debug: Falling back to show welcome subscription dialog (default un-subscribed on error)...');
-              _showWelcomeDialog();
-            }
-          });
-        } else {
-          debugPrint('Welcome Pop-up Debug: Dialog skipped (isLoggedIn = false or not mounted)');
+        if (!isLoggedIn || !mounted) {
+          debugPrint('Welcome Pop-up Debug: Dialog skipped (user is Guest or unauthenticated)');
+          return;
         }
-      }).catchError((error) {
-        debugPrint('Welcome Pop-up Debug: Error checking login status: $error');
-      });
+
+        debugPrint('Welcome Pop-up Debug: User is logged in, fetching subscription status...');
+        final status = await SubscriptionService.checkMySubscription();
+        debugPrint('Welcome Pop-up Debug: Subscription status hasAccess = ${status.hasAccess}');
+        if (!status.hasAccess && mounted) {
+          final stillLoggedIn = await _authApi.isLoggedIn();
+          if (stillLoggedIn && mounted) {
+            debugPrint('Welcome Pop-up Debug: Showing welcome subscription dialog...');
+            _showWelcomeDialog();
+          }
+        } else {
+          debugPrint('Welcome Pop-up Debug: Dialog skipped (hasAccess = true or not mounted)');
+        }
+      } catch (error) {
+        debugPrint('Welcome Pop-up Debug: Error checking subscription status: $error');
+        if (mounted) {
+          final stillLoggedIn = await _authApi.isLoggedIn();
+          if (stillLoggedIn && mounted) {
+            debugPrint('Welcome Pop-up Debug: Showing welcome subscription dialog on error fallback...');
+            _showWelcomeDialog();
+          }
+        }
+      }
     });
     // Video will be initialized after loading data (in _loadData)
   }
@@ -428,7 +434,12 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     _refreshContinueWatching();
   }
 
-  void _showWelcomeDialog() {
+  Future<void> _showWelcomeDialog() async {
+    final isLoggedIn = await _authApi.isLoggedIn();
+    if (!isLoggedIn || !mounted) {
+      debugPrint('Welcome Pop-up: Skipped showing welcome dialog - user is guest or not authenticated.');
+      return;
+    }
     showDialog(
       context: context,
       barrierDismissible: true,
@@ -488,7 +499,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                   child: ElevatedButton(
                     onPressed: () async {
                       Navigator.of(context).pop();
-                      final Uri url = Uri.parse('https://orientationapps.com/checkout');
+                      final Uri url = Uri.parse(ApiConfig.checkoutUrl);
                       try {
                         if (await canLaunchUrl(url)) {
                           await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -2015,12 +2026,15 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: brandRed.withOpacity(0.9),
+                    color: brandRed,
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.2),
-                      width: 0.5,
-                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: const Text(
                     'FREE',

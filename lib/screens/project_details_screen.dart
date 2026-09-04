@@ -19,6 +19,8 @@ import '../services/clip_service.dart';
 import '../services/cache_service.dart';
 import '../utils/auth_helper.dart';
 import '../widgets/skeleton_loader.dart';
+import '../widgets/subscription_unlock_dialog.dart';
+import '../config/api_config.dart';
 import '../main.dart'; // Added for routeObserver
 import '../services/project_service.dart';
 import '../services/subscription_service.dart';
@@ -66,6 +68,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
   String _userRole = 'user';
   String _userDeveloperId = '';
   bool _canEditScript = false;
+  bool _isUserSubscribed = false;
 
   @override
   void initState() {
@@ -284,22 +287,23 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
     if (widget.projectId == null) return;
     try {
       final subStatus = await SubscriptionService.checkMySubscription();
-      if (subStatus.hasAccess) {
-        final projectDetails = await ProjectService.getProjectDetails(widget.projectId!);
-        if (mounted) {
-          setState(() {
+      final hasAccess = subStatus.hasAccess;
+      if (mounted) {
+        setState(() {
+          _isUserSubscribed = hasAccess;
+          if (_projectDetails != null) {
             _projectDetails = ProjectDetails(
-              id: projectDetails.id,
-              title: projectDetails.title,
-              slug: projectDetails.slug,
-              location: projectDetails.location,
-              description: projectDetails.description,
-              projectThumbnailUrl: projectDetails.projectThumbnailUrl,
-              hasAccess: true,
-              episodes: projectDetails.episodes,
+              id: _projectDetails!.id,
+              title: _projectDetails!.title,
+              slug: _projectDetails!.slug,
+              location: _projectDetails!.location,
+              description: _projectDetails!.description,
+              projectThumbnailUrl: _projectDetails!.projectThumbnailUrl,
+              hasAccess: hasAccess || _projectDetails!.hasAccess,
+              episodes: _projectDetails!.episodes,
             );
-          });
-        }
+          }
+        });
       }
     } catch (e) {
       print('Error silently refreshing subscription status: $e');
@@ -311,16 +315,18 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
     try {
       // Re-fetch project details & check subscription status
       final detailsFuture = ProjectService.getProjectDetails(widget.projectId!, forceRefresh: true);
-      final subFuture = SubscriptionService.checkMySubscription();
+      final subFuture = SubscriptionService.checkMySubscription(forceRefresh: true);
       
       // Wait for both to complete
       final results = await Future.wait([detailsFuture, subFuture]);
       
       final projectDetails = results[0] as ProjectDetails;
       final subStatus = results[1] as UserSubscriptionStatus;
+      final hasAccess = subStatus.hasAccess || projectDetails.hasAccess;
       
       if (mounted) {
         setState(() {
+          _isUserSubscribed = subStatus.hasAccess;
           _projectDetails = ProjectDetails(
             id: projectDetails.id,
             title: projectDetails.title,
@@ -328,7 +334,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
             location: projectDetails.location,
             description: projectDetails.description,
             projectThumbnailUrl: projectDetails.projectThumbnailUrl,
-            hasAccess: subStatus.hasAccess || projectDetails.hasAccess,
+            hasAccess: hasAccess,
             episodes: projectDetails.episodes,
           );
         });
@@ -364,12 +370,13 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
     }
 
     try {
-      // Step 1: Fire main project fetch (single raw JSON fetch) and independent sub-fetches in parallel
+      // Step 1: Fire main project fetch, subscription status, and sub-fetches in parallel
       final projectRawFuture = _projectApi.getProjectRawJson(widget.projectId!);
       final clipsFuture = _clipService.getProjectClips(widget.projectId!);
       final pdfFilesFuture = _projectApi.getPdfFiles(widget.projectId!);
       final isSavedFuture = _projectApi.isProjectSaved(widget.projectId!);
       final inventoryFuture = _projectApi.getInventoryUrl(widget.projectId!);
+      final subFuture = SubscriptionService.checkMySubscription();
 
       final results = await Future.wait([
         projectRawFuture,
@@ -377,11 +384,14 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
         pdfFilesFuture,
         isSavedFuture,
         inventoryFuture,
+        subFuture,
       ]);
 
       final rawJson = results[0] as Map<String, dynamic>?;
       final project = rawJson != null ? ProjectModel.fromJson(rawJson) : null;
-      final projectDetails = rawJson != null
+      final subStatus = results[5] as UserSubscriptionStatus;
+      final isSubscribed = subStatus.hasAccess;
+      final rawDetails = rawJson != null
           ? ProjectDetails.fromJson(rawJson)
           : ProjectDetails(
               id: widget.projectId!,
@@ -390,6 +400,16 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
               hasAccess: false,
               episodes: [],
             );
+      final projectDetails = ProjectDetails(
+        id: rawDetails.id,
+        title: rawDetails.title,
+        slug: rawDetails.slug,
+        location: rawDetails.location,
+        description: rawDetails.description,
+        projectThumbnailUrl: rawDetails.projectThumbnailUrl,
+        hasAccess: isSubscribed || rawDetails.hasAccess,
+        episodes: rawDetails.episodes,
+      );
       final clips = results[1] as List<ClipModel>;
       final pdfFiles = results[2] as List<PdfFileModel>;
       final isSaved = results[3] as bool;
@@ -418,6 +438,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
 
       if (mounted) {
         setState(() {
+          _isUserSubscribed = isSubscribed;
           _project = project;
           _projectDetails = projectDetails;
           _clips = clips;
@@ -1753,7 +1774,12 @@ ${_project!.script.isNotEmpty ? _project!.script : _project!.description}
         itemCount: episodes.length,
         itemBuilder: (context, index) {
           final episode = episodes[index];
-          final isLocked = !_isProjectFreeByAge && (episode.isLocked || !(_projectDetails?.hasAccess ?? false));
+          final hasAccess = (_projectDetails?.hasAccess ?? false) || _isUserSubscribed;
+          // Backend isLocked must be respected: non-subscribed users cannot watch locked episodes.
+          final isLocked = !hasAccess && episode.isLocked;
+
+          debugPrint('🎬 [EpisodeLock] Ep #${episode.episodeNumber} "${episode.title}": episode.isLocked=${episode.isLocked}, _isProjectFreeByAge=$_isProjectFreeByAge, hasAccess=$hasAccess (_isUserSubscribed=$_isUserSubscribed, projectHasAccess=${_projectDetails?.hasAccess}) -> FINAL isLocked=$isLocked');
+
           return _EpisodeItem(
             episodeNumber: episode.episodeNumber,
             duration: episode.duration ?? '',
@@ -1763,80 +1789,12 @@ ${_project!.script.isNotEmpty ? _project!.script : _project!.description}
             isLocked: isLocked,
             onTap: () async {
               final isAuth = await AuthHelper.requireAuth(context);
-              if (!isAuth) return;
+              if (!isAuth || !mounted || !context.mounted) return;
 
               if (isLocked) {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    backgroundColor: const Color(0xFF141414),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(
-                        color: Colors.white.withOpacity(0.1),
-                        width: 0.5,
-                      ),
-                    ),
-                    title: const Row(
-                      children: [
-                        Text(
-                          '🔒 Subscription Required',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    content: Text(
-                      'Unlock full premium access to watch this episode and more exclusive orientation contents.',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 14,
-                        height: 1.4,
-                      ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      ElevatedButton(
-                        onPressed: () async {
-                          Navigator.pop(context);
-                          final uri = Uri.parse('https://orientationapps.com/checkout');
-                          try {
-                            await launchUrl(uri, mode: LaunchMode.externalApplication);
-                          } catch (e) {
-                            print('Error launching checkout: $e');
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: brandRed,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        ),
-                        child: const Text(
-                          'Subscribe Now',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                SubscriptionUnlockDialog.show(
+                  context,
+                  subscribeUrl: ApiConfig.checkoutUrl,
                 );
                 return;
               }
