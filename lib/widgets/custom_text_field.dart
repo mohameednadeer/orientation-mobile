@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 class CustomTextField extends StatefulWidget {
   final String hintText;
@@ -68,31 +67,12 @@ class _CustomTextFieldState extends State<CustomTextField> {
           ),
           suffixIcon: widget.isPassword
               ? IconButton(
-                  icon: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SvgPicture.asset(
-                        'assets/icons/eye_icon.svg',
-                        width: 22,
-                        height: 20,
-                        colorFilter: ColorFilter.mode(
-                          Colors.white.withOpacity(0.5),
-                          BlendMode.srcIn,
-                        ),
-                      ),
-                      if (_obscureText)
-                        Transform.rotate(
-                          angle: -0.785398, // -45 degrees
-                          child: Container(
-                            width: 28,
-                            height: 2,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.5),
-                              borderRadius: BorderRadius.circular(1),
-                            ),
-                          ),
-                        ),
-                    ],
+                  icon: Icon(
+                    _obscureText
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    color: Colors.white.withOpacity(0.5),
+                    size: 22,
                   ),
                   onPressed: () {
                     setState(() {

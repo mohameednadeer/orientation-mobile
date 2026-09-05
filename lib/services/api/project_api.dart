@@ -133,16 +133,36 @@ class ProjectApi {
   /// Creates a stable, URL-safe contentId for Watch History that still encodes projectId + episodeId.
   /// Example: episode__<projectId>__<episodeId>
   static String makeEpisodeContentId(String projectId, String episodeId) {
-    return '$_episodeContentPrefix$projectId\_\_$episodeId';
+    return '${_episodeContentPrefix}${projectId}__$episodeId';
   }
 
   static ({String projectId, String episodeId})? parseEpisodeContentId(
       String contentId) {
-    if (!contentId.startsWith(_episodeContentPrefix)) return null;
-    final rest = contentId.substring(_episodeContentPrefix.length);
-    final parts = rest.split('__');
-    if (parts.length != 2) return null;
-    return (projectId: parts[0], episodeId: parts[1]);
+    String s = contentId;
+    if (s.startsWith(_episodeContentPrefix)) {
+      s = s.substring(_episodeContentPrefix.length);
+    } else if (s.startsWith('episode_')) {
+      s = s.substring('episode_'.length);
+    }
+
+    if (s.contains(r'\_\_')) {
+      final p = s.split(r'\_\_');
+      if (p.length == 2 && p[0].isNotEmpty) return (projectId: p[0], episodeId: p[1]);
+    }
+    if (s.contains('__')) {
+      final p = s.split('__');
+      if (p.length == 2 && p[0].isNotEmpty) return (projectId: p[0], episodeId: p[1]);
+    }
+    if (s.contains('_')) {
+      final idx = s.lastIndexOf('_');
+      if (idx > 0 && idx < s.length - 1) {
+        return (projectId: s.substring(0, idx), episodeId: s.substring(idx + 1));
+      }
+    }
+    if (s.isNotEmpty) {
+      return (projectId: s, episodeId: '');
+    }
+    return null;
   }
 
   Future<bool> _hasAuthToken() async {
@@ -308,35 +328,41 @@ class ProjectApi {
     return out;
   }
 
-  /// Progress stored locally; still used as offline fallback.
+  /// Progress stored locally (0ms latency, 0 network calls).
   Future<void> trackWatching(
       String projectId, String episodeId, double progress) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('watch_progress_${projectId}_$episodeId', progress);
-  }
-
-  Future<double> getWatchingProgress(String projectId, String episodeId) async {
-    // Try backend watch-history first (if logged in), then fall back to local cache.
     try {
-      if (await _hasAuthToken()) {
-        final contentId = makeEpisodeContentId(projectId, episodeId);
-        final w = await _watchHistoryApi.getContentProgress(contentId);
-        if (w != null && w.duration > 0) {
-          final frac = (w.currentTime / w.duration).clamp(0.0, 1.0);
-          // Cache locally as well (for faster UI + offline fallback)
-          await trackWatching(projectId, episodeId, frac);
-          return frac;
-        }
-      }
-    } catch (_) {
-      // ignore, fallback to local
-    }
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getDouble('watch_progress_${projectId}_$episodeId') ?? 0.0;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble('watch_progress_${projectId}_$episodeId', progress);
+    } catch (_) {}
   }
 
-  /// Update watch progress on backend (Watch History) and keep local cache in sync.
-  Future<void> updateEpisodeWatchProgress({
+  /// Save playback progress strictly to local storage without network calls.
+  Future<void> saveLocalWatchProgress({
+    required String projectId,
+    required String episodeId,
+    required double currentTimeSeconds,
+    required double durationSeconds,
+  }) async {
+    final frac = durationSeconds > 0
+        ? (currentTimeSeconds / durationSeconds).clamp(0.0, 1.0)
+        : 0.0;
+    await trackWatching(projectId, episodeId, frac);
+  }
+
+  /// Read watch progress strictly from local storage (0 network requests).
+  Future<double> getWatchingProgress(String projectId, String episodeId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getDouble('watch_progress_${projectId}_$episodeId') ?? 0.0;
+    } catch (_) {
+      return 0.0;
+    }
+  }
+
+  /// Sync episode watch progress to backend (POST /watch-history/progress).
+  /// Should ONLY be called ONCE when exiting/closing an episode.
+  Future<void> syncEpisodeWatchProgress({
     required String projectId,
     required EpisodeModel episode,
     required String projectTitle,
@@ -368,6 +394,23 @@ class ProjectApi {
     } catch (_) {
       // Ignore backend sync errors; local cache still works.
     }
+  }
+
+  /// Legacy helper - delegates to syncEpisodeWatchProgress
+  Future<void> updateEpisodeWatchProgress({
+    required String projectId,
+    required EpisodeModel episode,
+    required String projectTitle,
+    required double currentTimeSeconds,
+    required double durationSeconds,
+  }) async {
+    await syncEpisodeWatchProgress(
+      projectId: projectId,
+      episode: episode,
+      projectTitle: projectTitle,
+      currentTimeSeconds: currentTimeSeconds,
+      durationSeconds: durationSeconds,
+    );
   }
 
   /// Returns the last watched episodeId for a given project using backend watch-history if available.
@@ -409,27 +452,30 @@ class ProjectApi {
   }
 
   Future<List<ProjectModel>> _fetchContinueWatchingProjects() async {
-    // Prefer backend watch history if logged in.
+    final Map<String, ({double progress, DateTime lastWatchedAt})> byProject = {};
+
+    // 1. Try backend watch history if logged in
     try {
       if (await _hasAuthToken()) {
         print('📺 Fetching continue watching from backend...');
         final items = await _watchHistoryApi.getContinueWatching(limit: 100);
         print('📺 Got ${items.length} items from watch history API');
 
-        final Map<String, ({double progress, DateTime lastWatchedAt})>
-            byProject = {};
-
         for (final w in items) {
-          final parsed = parseEpisodeContentId(w.contentId);
-          if (parsed == null) {
+          String? pid = w.projectId;
+          if (pid == null || pid.isEmpty) {
+            final parsed = parseEpisodeContentId(w.contentId);
+            pid = parsed?.projectId;
+          }
+          if (pid == null || pid.isEmpty) {
             print('⚠️ Could not parse contentId: ${w.contentId}');
             continue;
           }
-          final pid = parsed.projectId;
-          final frac = (w.progressPercentage / 100.0).clamp(0.0, 1.0);
-          if (frac <= 0 || frac >= 0.9) {
-            print(
-                '⏭️ Skipping ${w.contentTitle}: progress=$frac (${w.progressPercentage}%)');
+          double frac = (w.progressPercentage / 100.0).clamp(0.0, 1.0);
+          if (frac <= 0 && w.duration > 0 && w.currentTime > 0) {
+            frac = (w.currentTime / w.duration).clamp(0.0, 1.0);
+          }
+          if (frac <= 0.01 || frac >= 0.95) {
             continue;
           }
 
@@ -438,70 +484,43 @@ class ProjectApi {
               w.lastWatchedAt.isAfter(existing.lastWatchedAt)) {
             byProject[pid] = (progress: frac, lastWatchedAt: w.lastWatchedAt);
             print(
-                '✅ Added project $pid: progress=${(frac * 100).toStringAsFixed(1)}%');
+                '✅ Added backend continue watching for project $pid: progress=${(frac * 100).toStringAsFixed(1)}%');
           }
         }
-
-        print('📊 Found ${byProject.length} unique projects with progress');
-
-        // Fetch all projects in parallel for better performance
-        final projectIds = byProject.keys.toList();
-        final projectFutures = projectIds.map((id) => getProjectById(id));
-        final projects = await Future.wait(projectFutures);
-
-        final out = <ProjectModel>[];
-        for (var i = 0; i < projectIds.length; i++) {
-          final p = projects[i];
-          if (p != null) {
-            final e = byProject[projectIds[i]]!;
-            // Debug: Print image fields for continue watching projects
-            if (out.length < 3) {
-              print('📸 Continue watching project ${out.length} image fields:');
-              print('   projectThumbnailUrl: "${p.projectThumbnailUrl}"');
-              print('   image: "${p.image}"');
-              print('   logo: "${p.logo}"');
-            }
-            out.add(p.copyWith(watchProgress: e.progress));
-          } else {
-            print('⚠️ Project ${projectIds[i]} not found');
-          }
-        }
-
-        out.sort((a, b) {
-          final aT = byProject[a.id]?.lastWatchedAt ??
-              DateTime.fromMillisecondsSinceEpoch(0);
-          final bT = byProject[b.id]?.lastWatchedAt ??
-              DateTime.fromMillisecondsSinceEpoch(0);
-          return bT.compareTo(aT);
-        });
-
-        print('✅ Returning ${out.length} continue watching projects');
-        return out;
       } else {
         print('ℹ️ User not logged in, using local cache for continue watching');
       }
     } catch (e) {
       print('❌ Error fetching continue watching from backend: $e');
-      print('📦 Falling back to local cache...');
-      // fallback below
     }
 
-    // Local-only fallback (old behavior)
-    final prefs = await SharedPreferences.getInstance();
-    final keys = prefs.getKeys().where((k) => k.startsWith('watch_progress_'));
-    final Map<String, double> byProject = {};
-    for (final k in keys) {
-      final rest = k.replaceFirst('watch_progress_', '');
-      final i = rest.lastIndexOf('_');
-      if (i <= 0 || i >= rest.length - 1) continue;
-      final pid = rest.substring(0, i);
-      final prog = prefs.getDouble(k) ?? 0.0;
-      if (prog > 0 && prog < 0.95) {
-        if (!byProject.containsKey(pid) || (byProject[pid] ?? 0) < prog) {
-          byProject[pid] = prog;
+    // 2. Merge local cache progress (for recently watched / offline / fast UI updates)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys().where((k) => k.startsWith('watch_progress_'));
+      for (final k in keys) {
+        final rest = k.replaceFirst('watch_progress_', '');
+        final i = rest.lastIndexOf('_');
+        if (i <= 0 || i >= rest.length - 1) continue;
+        final pid = rest.substring(0, i);
+        final prog = prefs.getDouble(k) ?? 0.0;
+        if (prog > 0.01 && prog < 0.95) {
+          final existing = byProject[pid];
+          if (existing == null) {
+            byProject[pid] = (progress: prog, lastWatchedAt: DateTime.now());
+            print('✅ Added local continue watching for project $pid: progress=${(prog * 100).toStringAsFixed(1)}%');
+          }
         }
       }
+    } catch (e) {
+      print('⚠️ Error reading local watch progress: $e');
     }
+
+    if (byProject.isEmpty) {
+      print('ℹ️ No continue watching items found');
+      return [];
+    }
+
     // Fetch all projects in parallel for better performance
     final projectIds = byProject.keys.toList();
     final projectFutures = projectIds.map((id) => getProjectById(id));
@@ -510,10 +529,23 @@ class ProjectApi {
     final out = <ProjectModel>[];
     for (var i = 0; i < projectIds.length; i++) {
       final p = projects[i];
-      if (p != null)
-        out.add(p.copyWith(watchProgress: byProject[projectIds[i]]));
+      if (p != null) {
+        final e = byProject[projectIds[i]]!;
+        out.add(p.copyWith(watchProgress: e.progress));
+      } else {
+        print('⚠️ Project ${projectIds[i]} not found');
+      }
     }
-    out.sort((a, b) => (b.watchProgress ?? 0).compareTo(a.watchProgress ?? 0));
+
+    out.sort((a, b) {
+      final aT = byProject[a.id]?.lastWatchedAt ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final bT = byProject[b.id]?.lastWatchedAt ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      return bT.compareTo(aT);
+    });
+
+    print('✅ Returning ${out.length} continue watching projects');
     return out;
   }
 

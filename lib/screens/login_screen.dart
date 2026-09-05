@@ -106,7 +106,6 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
-    final isKeyboardVisible = keyboardHeight > 0;
     
     return Scaffold(
       backgroundColor: Colors.black,
@@ -117,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
           physics: const ClampingScrollPhysics(),
           child: Padding(
             padding: EdgeInsets.only(
-              bottom: keyboardHeight > 0 ? 20 : 0,
+              bottom: keyboardHeight > 0 ? 24 : 24,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,7 +129,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
                       // Title
                       const Text(
                         'Log in',
@@ -140,17 +139,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       // Description
                       Text(
                         'Enter your email and password to start easily following Orientation real estate projects.',
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.7),
                           fontSize: 14,
-                          height: 1.5,
+                          height: 1.45,
                         ),
                       ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
                       // Email field
                       CustomTextField(
                         hintText: 'Email',
@@ -183,7 +182,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         }
                       },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     // Forgot password link
                     Align(
                       alignment: Alignment.centerRight,
@@ -208,7 +207,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     // Error message
                       if (_errorMessage != null) ...[
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 14),
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
@@ -230,7 +229,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ],
-                      const SizedBox(height: 40),
+                      const SizedBox(height: 24),
                       // Login button
                       SizedBox(
                         width: double.infinity,
@@ -264,7 +263,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
                       // Create account link
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -298,7 +297,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 22),
                       
                       // Social Login Divider
                       Row(
@@ -318,7 +317,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           Expanded(child: Divider(color: Colors.white.withOpacity(0.2), thickness: 1)),
                         ],
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 22),
 
                       // Social Login Buttons
                       GetX<AuthController>(
@@ -355,7 +354,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               // Facebook Button (temporarily hidden from UI, auth logic kept intact)
                               if (_showFacebookLogin) ...[
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 14),
                                 _buildSocialButton(
                                   title: 'Continue with Facebook',
                                   iconPath: 'assets/icons/facebook_icon.png',
@@ -371,7 +370,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           );
                         }
                       ),
-                      const SizedBox(height: 40),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),

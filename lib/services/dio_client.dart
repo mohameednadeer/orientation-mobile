@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
+import '../core/api_client.dart';
 
 class DioClient {
   static final DioClient _instance = DioClient._internal();
@@ -68,16 +69,29 @@ class DioClient {
         if (newRefreshToken.isNotEmpty) {
           await prefs.setString('refresh_token', newRefreshToken);
         }
+        // Sync tokens to ApiClient
+        try {
+          await ApiClient.saveTokens(
+            accessToken: newAccessToken,
+            refreshToken: newRefreshToken.isNotEmpty ? newRefreshToken : refreshToken,
+          );
+        } catch (_) {}
         return true;
       }
       
       return false;
-    } catch (e) {
+    } on DioException catch (e) {
       print('❌ Failed to refresh token: $e');
-      // Clear tokens on refresh failure
-      final prefs = await _getPrefs();
-      await prefs.remove('auth_token');
-      await prefs.remove('refresh_token');
+      final statusCode = e.response?.statusCode;
+      if (statusCode == 401 || statusCode == 403) {
+        // Clear tokens ONLY if server explicitly rejected the refresh token
+        final prefs = await _getPrefs();
+        await prefs.remove('auth_token');
+        await prefs.remove('refresh_token');
+      }
+      return false;
+    } catch (e) {
+      print('❌ Unexpected error refreshing token: $e');
       return false;
     } finally {
       _isRefreshing = false;

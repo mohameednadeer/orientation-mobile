@@ -345,24 +345,9 @@ class HomeApi {
     }
   }
 
-  /// GET /developer — requires ADMIN/SUPERADMIN; may 403 for normal users.
+  /// /developer endpoint requires ADMIN/SUPERADMIN on backend; return empty for mobile users to prevent 403.
   Future<List<DeveloperModel>> getDevelopers() async {
-    try {
-      final response = await _dioClient.dio.get('/developer');
-      List<dynamic> list;
-      final responseData = response.data;
-      if (responseData is List) {
-        list = responseData;
-      } else if (responseData is Map && responseData['value'] is List) {
-        list = responseData['value'] as List;
-      } else {
-        list = <dynamic>[];
-      }
-      return list.map((e) => DeveloperModel.fromJson(e as Map<String, dynamic>)).toList();
-    } on DioException catch (e) {
-      print('Error getting developers: ${e.message}');
-      return [];
-    }
+    return [];
   }
 
   /// No /areas in backend; return empty.

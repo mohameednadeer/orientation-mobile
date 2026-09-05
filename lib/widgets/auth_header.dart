@@ -2,12 +2,24 @@ import 'package:flutter/material.dart';
 import 'orientation_logo.dart';
 
 class AuthHeader extends StatelessWidget {
-  const AuthHeader({super.key});
+  final double? height;
+  final double? logoBottom;
+
+  const AuthHeader({
+    super.key,
+    this.height,
+    this.logoBottom,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    // Responsive default: ~27% of screen height, clamped between 190 and 240 to balance space and fit content
+    final effectiveHeight = height ?? (screenHeight * 0.27).clamp(190.0, 240.0);
+    final effectiveLogoBottom = logoBottom ?? 20.0;
+
     return SizedBox(
-      height: 320,
+      height: effectiveHeight,
       width: double.infinity,
       child: Stack(
         fit: StackFit.expand,
@@ -29,19 +41,19 @@ class AuthHeader extends StatelessWidget {
                 end: Alignment.bottomCenter,
                 colors: [
                   Colors.transparent,
-                  Colors.black.withOpacity(0.5),
+                  Colors.black.withOpacity(0.4),
                   Colors.black,
                 ],
-                stops: const [0.4, 0.8, 1.0],
+                stops: const [0.25, 0.75, 1.0],
               ),
             ),
           ),
           // Logo centered at the bottom
-          const Positioned(
+          Positioned(
             left: 0,
             right: 0,
-            bottom: 30,
-            child: Center(
+            bottom: effectiveLogoBottom,
+            child: const Center(
               child: OrientationLogo(),
             ),
           ),

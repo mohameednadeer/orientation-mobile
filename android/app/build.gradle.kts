@@ -44,8 +44,8 @@ android {
         applicationId = "com.archnest.orientation"
         minSdk = flutter.minSdkVersion
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.0.2"
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
     }
     
     packaging {

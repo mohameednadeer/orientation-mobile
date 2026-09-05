@@ -114,8 +114,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
           return;
         }
 
-        debugPrint('Welcome Pop-up Debug: User is logged in, fetching subscription status...');
-        final status = await SubscriptionService.checkMySubscription();
+        debugPrint('Welcome Pop-up Debug: User is logged in, checking subscription status...');
+        final status = SubscriptionService.currentSubscriptionStatus;
         debugPrint('Welcome Pop-up Debug: Subscription status hasAccess = ${status.hasAccess}');
         if (!status.hasAccess && mounted) {
           final stillLoggedIn = await _authApi.isLoggedIn();
@@ -385,34 +385,33 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     }
   }
 
+  bool _isHomeActive = true;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Do NOT refresh on initial build while _isLoading is true
-    if (_isLoading) return;
-
-    final now = DateTime.now();
-    if (_lastRefreshTime == null ||
-        now.difference(_lastRefreshTime!).inSeconds > 2) {
-      _lastRefreshTime = now;
-      _refreshContinueWatching();
-    }
+    // Do NOT trigger background network calls on dependency rebuilds
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      // Refresh continue watching when app comes back to foreground
+    if (state == AppLifecycleState.resumed && _isHomeActive) {
+      // Refresh continue watching only if home tab is currently active
       _refreshContinueWatching();
     }
   }
 
   Future<void> _refreshContinueWatching() async {
+    if (!_isHomeActive) {
+      print('⏸️ Skipping continue watching refresh - Home tab is inactive');
+      return;
+    }
+
     try {
       print('🔄 Refreshing continue watching...');
       final continueWatching = await _homeApi.getContinueWatching();
       print('📊 Got ${continueWatching.length} continue watching projects');
-      if (mounted) {
+      if (mounted && _isHomeActive) {
         setState(() {
           _continueWatching = continueWatching;
           _lastRefreshTime = DateTime.now();
@@ -420,7 +419,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
         print(
             '✅ Continue watching updated in UI: ${_continueWatching.length} projects');
       } else {
-        print('⚠️ Widget not mounted, skipping setState');
+        print('⚠️ Widget not mounted or inactive, skipping setState');
       }
     } catch (e, stackTrace) {
       print('❌ Error refreshing continue watching: $e');
@@ -429,10 +428,12 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     }
   }
 
-  // Public method to refresh continue watching (can be called from MainScreen)
+  // Public method to refresh continue watching (can be called from MainScreen when switching to Home)
   void refreshContinueWatching() {
+    _isHomeActive = true;
     _refreshContinueWatching();
   }
+
 
   Future<void> _showWelcomeDialog() async {
     final isLoggedIn = await _authApi.isLoggedIn();
@@ -809,6 +810,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
 
   /// Pause all videos (called when switching away from Home tab)
   void pauseVideos() {
+    _isHomeActive = false;
     for (var controller in _videoControllers.values) {
       if (controller.value.isPlaying) {
         controller.pause();
@@ -818,10 +820,12 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
 
   /// Resume video playback (called when switching back to Home tab)
   void resumeVideos() {
+    _isHomeActive = true;
     if (_isHeroVisible && _videoControllers.containsKey(_currentVideoIndex)) {
       _videoControllers[_currentVideoIndex]?.play();
     }
   }
+
 
   void scrollToUpcomingProjects() {
     // Scroll to upcoming projects section using the key

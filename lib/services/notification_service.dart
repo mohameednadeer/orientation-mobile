@@ -73,9 +73,6 @@ class NotificationService {
 
       _isInitialized = true;
       print('✅ Notification service initialized');
-      
-      // Start periodic check for new news
-      startPeriodicNewsCheck();
     } catch (e) {
       print('❌ Error initializing notifications: $e');
       // Don't throw - allow app to continue even if notifications fail

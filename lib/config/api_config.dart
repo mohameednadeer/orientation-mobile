@@ -13,7 +13,7 @@
 ///   flutter run --dart-define=BASE_URL=https://staging.orientationapps.com
 ///
 ///   # Build release with production URL explicitly
-///   flutter build apk --dart-define=BASE_URL=https://api.orientationapps.com
+///   flutter build apk --dart-define=BASE_URL=https://api.orientationapps.com/api/v1
 ///
 /// The value is baked in at compile time — no runtime file reads needed.
 /// ---------------------------------------------------------------------------

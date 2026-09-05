@@ -277,56 +277,20 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
         // Reinitialize video if needed
         _initializeAdVideo();
       }
-
-      // Auto-refresh subscription when app resumes (silent update)
-      _refreshSubscriptionSilently();
-    }
-  }
-
-  Future<void> _refreshSubscriptionSilently() async {
-    if (widget.projectId == null) return;
-    try {
-      final subStatus = await SubscriptionService.checkMySubscription();
-      final hasAccess = subStatus.hasAccess;
-      if (mounted) {
-        setState(() {
-          _isUserSubscribed = hasAccess;
-          if (_projectDetails != null) {
-            _projectDetails = ProjectDetails(
-              id: _projectDetails!.id,
-              title: _projectDetails!.title,
-              slug: _projectDetails!.slug,
-              location: _projectDetails!.location,
-              description: _projectDetails!.description,
-              projectThumbnailUrl: _projectDetails!.projectThumbnailUrl,
-              hasAccess: hasAccess || _projectDetails!.hasAccess,
-              episodes: _projectDetails!.episodes,
-            );
-          }
-        });
-      }
-    } catch (e) {
-      print('Error silently refreshing subscription status: $e');
     }
   }
 
   Future<void> _handleRefresh() async {
     if (widget.projectId == null) return;
     try {
-      // Re-fetch project details & check subscription status
-      final detailsFuture = ProjectService.getProjectDetails(widget.projectId!, forceRefresh: true);
-      final subFuture = SubscriptionService.checkMySubscription(forceRefresh: true);
-      
-      // Wait for both to complete
-      final results = await Future.wait([detailsFuture, subFuture]);
-      
-      final projectDetails = results[0] as ProjectDetails;
-      final subStatus = results[1] as UserSubscriptionStatus;
-      final hasAccess = subStatus.hasAccess || projectDetails.hasAccess;
+      // Re-fetch project details & read global subscription status (0 extra sub network calls)
+      final projectDetails = await ProjectService.getProjectDetails(widget.projectId!, forceRefresh: true);
+      final isSubscribed = SubscriptionService.currentSubscriptionStatus.hasAccess;
+      final hasAccess = isSubscribed || projectDetails.hasAccess;
       
       if (mounted) {
         setState(() {
-          _isUserSubscribed = subStatus.hasAccess;
+          _isUserSubscribed = isSubscribed;
           _projectDetails = ProjectDetails(
             id: projectDetails.id,
             title: projectDetails.title,
@@ -340,7 +304,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
         });
       }
     } catch (e) {
-      print('Error refreshing project details and subscription: $e');
+      print('Error refreshing project details: $e');
     }
   }
 
@@ -370,13 +334,12 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
     }
 
     try {
-      // Step 1: Fire main project fetch, subscription status, and sub-fetches in parallel
+      // Step 1: Fire main project fetch and sub-fetches in parallel (0 subscription network calls)
       final projectRawFuture = _projectApi.getProjectRawJson(widget.projectId!);
       final clipsFuture = _clipService.getProjectClips(widget.projectId!);
       final pdfFilesFuture = _projectApi.getPdfFiles(widget.projectId!);
       final isSavedFuture = _projectApi.isProjectSaved(widget.projectId!);
       final inventoryFuture = _projectApi.getInventoryUrl(widget.projectId!);
-      final subFuture = SubscriptionService.checkMySubscription();
 
       final results = await Future.wait([
         projectRawFuture,
@@ -384,13 +347,12 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
         pdfFilesFuture,
         isSavedFuture,
         inventoryFuture,
-        subFuture,
       ]);
 
       final rawJson = results[0] as Map<String, dynamic>?;
       final project = rawJson != null ? ProjectModel.fromJson(rawJson) : null;
-      final subStatus = results[5] as UserSubscriptionStatus;
-      final isSubscribed = subStatus.hasAccess;
+      // Synchronously read global subscription status (0ms latency, 0 network calls)
+      final isSubscribed = SubscriptionService.currentSubscriptionStatus.hasAccess;
       final rawDetails = rawJson != null
           ? ProjectDetails.fromJson(rawJson)
           : ProjectDetails(

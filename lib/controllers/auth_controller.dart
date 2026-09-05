@@ -18,6 +18,66 @@ class AuthController extends GetxController {
   var isFacebookLoading = false.obs;
   var errorMessage = ''.obs;
 
+  final Rx<UserModel?> currentUser = Rx<UserModel?>(null);
+  final Rx<UserSubscriptionStatus> currentSubscription =
+      UserSubscriptionStatus(hasAccess: false).obs;
+
+  @override
+  void onInit() {
+    super.onInit();
+    loadCachedAuthState();
+  }
+
+  /// Initialize and load cached user & subscription state on app start (0 network calls)
+  Future<void> loadCachedAuthState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasToken = (prefs.getString('auth_token')?.isNotEmpty ?? false) ||
+          (prefs.getString('token')?.isNotEmpty ?? false);
+      
+      final localAccess = prefs.getBool('user_is_subscribed') ??
+          prefs.getBool('user_has_subscription_access') ??
+          false;
+      currentSubscription.value = UserSubscriptionStatus(hasAccess: localAccess);
+
+      if (hasToken) {
+        final userId = prefs.getString('user_id') ?? '';
+        final fName = prefs.getString('user_first_name') ?? '';
+        final lName = prefs.getString('user_last_name') ?? '';
+        final fullName = (fName.isNotEmpty || lName.isNotEmpty) ? '$fName $lName'.trim() : '';
+        final username = fullName.isNotEmpty
+            ? fullName
+            : (prefs.getString('user_name') ?? prefs.getString('username') ?? 'User');
+        final email = prefs.getString('user_email') ?? prefs.getString('email') ?? '';
+        final role = prefs.getString('user_role') ?? prefs.getString('role') ?? 'user';
+        final phone = prefs.getString('user_phone');
+        currentUser.value = UserModel(
+          id: userId,
+          username: username,
+          email: email,
+          role: role,
+          phoneNumber: phone,
+        );
+
+        // Fetch /subscriptions/me once globally on root initialization
+        fetchGlobalSubscription();
+      }
+    } catch (e) {
+      debugPrint('⚠️ [AuthController] Error loading cached auth state: $e');
+    }
+  }
+
+  /// Fetches GET /subscriptions/me ONCE globally and updates the reactive state
+  Future<void> fetchGlobalSubscription({bool forceRefresh = false}) async {
+    try {
+      final status = await SubscriptionService.checkMySubscription(forceRefresh: forceRefresh);
+      currentSubscription.value = status;
+      debugPrint('💎 [AuthController] Global subscription state updated: hasAccess=${status.hasAccess}');
+    } catch (e) {
+      debugPrint('⚠️ [AuthController] Failed to fetch global subscription: $e');
+    }
+  }
+
   Future<void> signInWithGoogle() async {
     try {
       isGoogleLoading.value = true;
@@ -182,20 +242,21 @@ class AuthController extends GetxController {
         debugPrint('⚠️ [AuthController] ApiClient saveTokens non-fatal error: $storageErr');
       }
 
+      currentUser.value = user;
+
       // Cache subscription status immediately if user is subscribed
       if (user.isSubscribed) {
-        await SubscriptionService.cacheSubscriptionStatus(
-          UserSubscriptionStatus(
-            hasAccess: true,
-            status: user.subscriptionStatus,
-            planName: user.planName,
-          ),
+        final subStatus = UserSubscriptionStatus(
+          hasAccess: true,
+          status: user.subscriptionStatus,
+          planName: user.planName,
         );
+        currentSubscription.value = subStatus;
+        await SubscriptionService.cacheSubscriptionStatus(subStatus);
       }
 
-      // Refresh subscription in the background
-      SubscriptionService.checkMySubscription(forceRefresh: true)
-          .catchError((_) => UserSubscriptionStatus(hasAccess: false));
+      // Fetch latest subscription once in background
+      fetchGlobalSubscription(forceRefresh: true);
 
       debugPrint('✅ [AuthController] Social login stored successfully. Navigating to MainScreen...');
       // Navigate to Main Screen

@@ -13,6 +13,7 @@ class ClipModel {
   final int likes;
   final bool isLiked;
   final bool hasWhatsApp;
+  final bool? locked;
   final DateTime? createdAt;
 
   ClipModel({
@@ -30,6 +31,7 @@ class ClipModel {
     this.likes = 0,
     this.isLiked = false,
     this.hasWhatsApp = true,
+    this.locked,
     this.createdAt,
   });
 
@@ -41,17 +43,20 @@ class ClipModel {
     final rawProj = json['projectId'] ?? json['project'];
     if (rawProj != null) {
       if (rawProj is Map) {
-        projectId = rawProj['_id']?.toString() ??
-            rawProj['id']?.toString() ??
+        final projMap = Map<String, dynamic>.from(rawProj);
+        projectId = projMap['_id']?.toString() ??
+            projMap['id']?.toString() ??
             '';
-        projectName = rawProj['title']?.toString() ??
-            rawProj['name']?.toString() ??
-            rawProj['projectName']?.toString() ??
+        projectName = projMap['title']?.toString() ??
+            projMap['name']?.toString() ??
+            projMap['projectName']?.toString() ??
             '';
-        projectLogo = rawProj['logo']?.toString() ??
-            rawProj['logoUrl']?.toString() ??
-            rawProj['projectThumbnailUrl']?.toString() ??
-            rawProj['image']?.toString() ??
+        projectLogo = projMap['logo']?.toString() ??
+            projMap['logoUrl']?.toString() ??
+            projMap['projectThumbnailUrl']?.toString() ??
+            projMap['thumbnailUrl']?.toString() ??
+            projMap['thumbnail']?.toString() ??
+            projMap['image']?.toString() ??
             '';
       } else {
         projectId = rawProj.toString();
@@ -77,15 +82,20 @@ class ClipModel {
     String developerLogo = json['developerLogo']?.toString() ?? '';
     final dev = json['developerId'] ?? json['developer'];
     if (dev is Map) {
-      if (developerName.isEmpty) developerName = dev['name']?.toString() ?? '';
+      final devMap = Map<String, dynamic>.from(dev);
+      if (developerName.isEmpty) {
+        developerName = devMap['name']?.toString() ?? devMap['title']?.toString() ?? '';
+      }
       if (developerLogo.isEmpty) {
-        developerLogo =
-            dev['logoUrl']?.toString() ?? dev['logo']?.toString() ?? '';
+        developerLogo = devMap['logoUrl']?.toString() ??
+            devMap['logo']?.toString() ??
+            devMap['image']?.toString() ??
+            '';
       }
     }
 
     // Fallbacks between project and developer if one is missing
-    if (projectName.isEmpty && developerName.isNotEmpty) {
+    if (projectName.isEmpty && developerName.isNotEmpty && developerName != 'User') {
       projectName = developerName;
     }
     if (projectLogo.isEmpty && developerLogo.isNotEmpty) {
@@ -134,11 +144,13 @@ class ClipModel {
       likes: likes,
       isLiked: json['isLiked'] == true,
       hasWhatsApp: json['hasWhatsApp'] != false, // defaults to true unless explicitly false
+      locked: json['locked'] == true,
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())
           : null,
     );
   }
+
 
   Map<String, dynamic> toJson() {
     return {
@@ -156,6 +168,7 @@ class ClipModel {
       'likes': likes,
       'isLiked': isLiked,
       'hasWhatsApp': hasWhatsApp,
+      'locked': locked,
       'createdAt': createdAt?.toIso8601String(),
     };
   }
@@ -175,6 +188,7 @@ class ClipModel {
     int? likes,
     bool? isLiked,
     bool? hasWhatsApp,
+    bool? locked,
     DateTime? createdAt,
   }) {
     return ClipModel(
@@ -192,7 +206,12 @@ class ClipModel {
       likes: likes ?? this.likes,
       isLiked: isLiked ?? this.isLiked,
       hasWhatsApp: hasWhatsApp ?? this.hasWhatsApp,
+      locked: locked ?? this.locked,
       createdAt: createdAt ?? this.createdAt,
     );
   }
 }
+
+/// Type alias for Reel / Clip representation
+typedef ReelModel = ClipModel;
+

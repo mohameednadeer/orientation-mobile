@@ -1,12 +1,12 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart' as getx;
 import '../models/clip_model.dart';
 import '../reels/reels_screen.dart';
 import '../services/dio_client.dart';
 import '../services/clip_service.dart';
+import '../services/cache_service.dart';
 
 /// Simple Clip API without caching - Pure network calls
 /// Best for: Real-time data, small datasets, or when server handles caching
@@ -557,6 +557,10 @@ class ClipsScreenState extends State<ClipsScreen> {
   @override
   void initState() {
     super.initState();
+    // Pre-fetch clips in the background immediately so the tab is ready when opened
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadClips(forceRefresh: false);
+    });
   }
 
   Future<void> _loadClips({bool forceRefresh = false}) async {
@@ -579,7 +583,13 @@ class ClipsScreenState extends State<ClipsScreen> {
         setState(() {
           _clips = clips;
           _isLoading = false;
+          _hasLoadedOnce = true;
         });
+      }
+
+      // Pre-cache thumbnails and initial video files in the background
+      if (clips.isNotEmpty) {
+        CacheService().cacheReelsContent(clips);
       }
     } catch (e, st) {
       debugPrint('❌ [ClipsScreen] Error loading clips: $e\n$st');
@@ -596,7 +606,7 @@ class ClipsScreenState extends State<ClipsScreen> {
     _reelsKey.currentState?.setVisible(visible);
     if (visible && (!_hasLoadedOnce || _clips.isEmpty)) {
       _hasLoadedOnce = true;
-      _loadClips(forceRefresh: true);
+      _loadClips(forceRefresh: false);
     }
   }
 
@@ -644,16 +654,12 @@ class ClipsScreenState extends State<ClipsScreen> {
         ),
       );
     }
-    return RefreshIndicator(
-      color: const Color(0xFFE50914),
-      backgroundColor: Colors.black,
-      onRefresh: refresh,
-      child: ReelsScreen(
-        key: _reelsKey,
-        clips: _clips,
-        initialIndex: 0,
-        initialVisible: true,
-      ),
+    return ReelsScreen(
+      key: _reelsKey,
+      clips: _clips,
+      initialIndex: 0,
+      initialVisible: true,
     );
   }
 }
+
