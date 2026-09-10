@@ -15,6 +15,7 @@ import 'core/auth_interceptor.dart';
 import 'screens/login_screen.dart';
 import 'services/in_memory_cache_service.dart';
 import 'services/subscription_service.dart';
+import 'services/deep_link_service.dart';
 
 import 'controllers/auth_controller.dart';
 
@@ -51,6 +52,7 @@ Future<void> _initializeApp() async {
       if (Get.isRegistered<AuthController>()) {
         Get.find<AuthController>().currentUser.value = null;
       }
+      Get.offAll(() => const LoginScreen());
     } catch (_) {}
   };
   try {
@@ -91,6 +93,14 @@ Future<void> _initializeApp() async {
     );
   } catch (e) {
     if (kDebugMode) debugPrint('Get.put init error (non-fatal): $e');
+  }
+
+  try {
+    final deepLinkService = DeepLinkService();
+    await deepLinkService.init();
+    if (kDebugMode) debugPrint('Deep link service initialized');
+  } catch (e) {
+    if (kDebugMode) debugPrint('DeepLinkService init error (non-fatal): $e');
   }
 }
 
@@ -159,9 +169,9 @@ class _OrientationAppState extends State<OrientationApp>
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: Colors.black,
-        colorScheme: ColorScheme.dark(
-          primary: const Color(0xFFE50914),
-          secondary: const Color(0xFFE50914),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFFE50914),
+          secondary: Color(0xFFE50914),
           surface: Colors.black,
         ),
       ),

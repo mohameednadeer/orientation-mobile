@@ -17,7 +17,7 @@ enum UserRole { user, developer, admin }
 
 class AccountScreen extends StatefulWidget {
   final VoidCallback? onProfileUpdated;
-  
+
   const AccountScreen({super.key, this.onProfileUpdated});
 
   @override
@@ -27,7 +27,7 @@ class AccountScreen extends StatefulWidget {
 class _AccountScreenState extends State<AccountScreen> {
   static const Color brandRed = Color(0xFFE50914);
   final AuthApi _authApi = AuthApi();
-  
+
   String _userName = 'User';
   String _userEmail = '';
   String _userRole = 'user';
@@ -75,11 +75,12 @@ class _AccountScreenState extends State<AccountScreen> {
           }
           // Don't overwrite a valid name with 'Guest'
           _userEmail = freshProfile['email'] ?? _userEmail;
-          _userProfilePicture = freshProfile['profilePicture'] ?? _userProfilePicture;
+          _userProfilePicture =
+              freshProfile['profilePicture'] ?? _userProfilePicture;
         });
       }
     } catch (e) {
-      print('Error fetching fresh user profile: $e');
+      debugPrint('Error fetching fresh user profile: $e');
     }
   }
 
@@ -215,7 +216,7 @@ class _AccountScreenState extends State<AccountScreen> {
     if (shouldLogout == true) {
       await _authApi.logout();
       if (!mounted) return;
-      
+
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
@@ -349,105 +350,103 @@ class _AccountScreenState extends State<AccountScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final userRole = _getUserRole();
+    final topPadding = MediaQuery.of(context).padding.top;
+
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Column(
+      body: Stack(
         children: [
-          // Header with profile
-          _buildHeader(),
-          // Menu items
-          Expanded(
-            child: _buildMenuList(context),
-          ),
-          // Delete account & Logout buttons
-          _buildDeleteAccountButton(context),
-          _buildLogoutButton(context),
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.only(top: 50, bottom: 30),
-      decoration: const BoxDecoration(
-        color: Color(0xFF150000),
-      ),
-      child: Column(
-        children: [
-          // Logo
-          const OrientationLogo(),
-          const SizedBox(height: 24),
-          // Avatar
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1a1a1a),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withOpacity(0.15),
-                width: 1.5,
-              ),
-            ),
-            child: ClipOval(
-              child: _userProfilePicture.isNotEmpty
-                  ? Image.network(
-                      _userProfilePicture,
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Center(
-                          child: Icon(
-                            Icons.person,
-                            color: Colors.white,
-                            size: 45,
-                          ),
-                        );
-                      },
-                    )
-                  : const Center(
-                      child: Icon(
-                        Icons.person,
-                        color: Colors.white,
-                        size: 45,
-                      ),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Name
-          _isLoading
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : Text(
-                  _userName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+          // Ambient soft red radial glow behind avatar
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 380,
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(0, -0.2),
+                    radius: 0.8,
+                    colors: [
+                      brandRed.withOpacity(0.16),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.0, 1.0],
                   ),
                 ),
-          const SizedBox(height: 4),
-          // Role
-          Text(
-            _getUserRole() == UserRole.admin
-                ? 'Admin'
-                : _getUserRole() == UserRole.developer
-                    ? 'Developer'
-                    : 'User',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.5),
-              fontSize: 14,
+              ),
+            ),
+          ),
+
+          // Scrollable Content
+          SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Padding(
+              padding: EdgeInsets.only(
+                top: topPadding > 0 ? topPadding + 12 : 28,
+                bottom: 24,
+              ),
+              child: Column(
+                children: [
+                  // Logo
+                  const OrientationLogo(),
+                  const SizedBox(height: 22),
+
+                  // Circular Avatar with red ring and glow
+                  _buildAvatar(),
+                  const SizedBox(height: 14),
+
+                  // Name
+                  _isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : Text(
+                          _userName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                  const SizedBox(height: 6),
+
+                  // Email
+                  if (_userEmail.isNotEmpty)
+                    Text(
+                      _userEmail,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.45),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  const SizedBox(height: 24),
+
+                  // First Card Group (Account info + role-specific items)
+                  _buildFirstCardGroup(userRole),
+                  const SizedBox(height: 16),
+
+                  // Second Card Group (About Us, Privacy, Terms)
+                  _buildSecondCardGroup(),
+                  const SizedBox(height: 24),
+
+                  // Logout Button
+                  _buildLogoutButton(),
+
+                  // Delete Account Text Button
+                  _buildDeleteAccountButton(),
+                ],
+              ),
             ),
           ),
         ],
@@ -455,222 +454,353 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
-  Widget _buildMenuList(BuildContext context) {
-    final userRole = _getUserRole();
-    final menuItems = <_MenuItem>[];
-    
-    // All users can see these
-    menuItems.add(
-      _MenuItem(title: 'Account', subtitle: 'Information', onTap: () async {
-        final isAuth = await AuthHelper.requireAuth(context);
-        if (!isAuth) return;
-        
-        final result = await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const AccountInfoScreen(),
+  Widget _buildAvatar() {
+    return Container(
+      width: 96,
+      height: 96,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFF1E1E22),
+        border: Border.all(
+          color: brandRed,
+          width: 2.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: brandRed.withOpacity(0.38),
+            blurRadius: 22,
+            spreadRadius: 2,
           ),
-        );
-        // Reload user data if profile was updated
-        if (result == true) {
-          _loadUserData();
-          // Notify parent (MainScreen) to refresh HomeFeedScreen
-          widget.onProfileUpdated?.call();
-        }
-      }),
-    );
-
-    // Admin only: Dashboard
-    if (userRole == UserRole.admin) {
-      menuItems.add(
-        _MenuItem(title: 'Admin', subtitle: 'Dashboard', onTap: () async {
-          final isAuth = await AuthHelper.requireAuth(context);
-          if (!isAuth) return;
-          
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AdminDashboardScreen(),
-            ),
-          );
-        }),
-      );
-    }
-
-    // Users can apply to become developers
-    if (userRole == UserRole.user) {
-      menuItems.add(
-        _MenuItem(title: 'Join', subtitle: 'Us', onTap: () async {
-          final isAuth = await AuthHelper.requireAuth(context);
-          if (!isAuth) return;
-          
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const JoinUsScreen(),
-            ),
-          );
-        }),
-      );
-    }
-
-    // Developers can add reels and change inventory
-    if (userRole == UserRole.developer || userRole == UserRole.admin) {
-      menuItems.add(
-        _MenuItem(title: 'Add', subtitle: 'Reel', onTap: () async {
-          final isAuth = await AuthHelper.requireAuth(context);
-          if (!isAuth) return;
-          
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AddReelScreen(),
-            ),
-          );
-        }),
-      );
-      menuItems.add(
-        _MenuItem(title: 'Change', subtitle: 'Inventory', onTap: () async {
-          final isAuth = await AuthHelper.requireAuth(context);
-          if (!isAuth) return;
-          
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const ChangeInventoryScreen(),
-            ),
-          );
-        }),
-      );
-    }
-
-    // All users can see these
-    menuItems.addAll([
-      _MenuItem(title: 'About', subtitle: 'Us', onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const AboutUsScreen(),
-          ),
-        );
-      }),
-      _MenuItem(title: 'Privacy', subtitle: 'Policy', onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const PrivacyPolicyScreen(),
-          ),
-        );
-      }),
-      _MenuItem(title: 'Terms and', subtitle: 'Conditions', onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const TermsConditionsScreen(),
-          ),
-        );
-      }),
-    ]);
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      itemCount: menuItems.length,
-      itemBuilder: (context, index) => menuItems[index],
+        ],
+      ),
+      child: ClipOval(
+        child: _userProfilePicture.isNotEmpty
+            ? Image.network(
+                _userProfilePicture,
+                width: 96,
+                height: 96,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return const Center(
+                    child: Icon(
+                      Icons.person,
+                      color: Colors.white,
+                      size: 48,
+                    ),
+                  );
+                },
+              )
+            : const Center(
+                child: Icon(
+                  Icons.person,
+                  color: Colors.white,
+                  size: 48,
+                ),
+              ),
+      ),
     );
   }
 
-  Widget _buildDeleteAccountButton(BuildContext context) {
+
+
+  Widget _buildFirstCardGroup(UserRole userRole) {
+    final items = <Widget>[];
+
+    // Account Information (all users)
+    items.add(
+      _buildCardRow(
+        icon: Icons.person_outline,
+        title: 'Account Information',
+        onTap: () async {
+          final isAuth = await AuthHelper.requireAuth(context);
+          if (!isAuth) return;
+
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AccountInfoScreen(),
+            ),
+          );
+          if (result == true) {
+            _loadUserData();
+            widget.onProfileUpdated?.call();
+          }
+        },
+      ),
+    );
+
+    // Join Us (for regular users)
+    if (userRole == UserRole.user) {
+      items.add(_buildDivider());
+      items.add(
+        _buildCardRow(
+          icon: Icons.rocket_launch_outlined,
+          title: 'Join Us',
+          onTap: () async {
+            final isAuth = await AuthHelper.requireAuth(context);
+            if (!isAuth) return;
+
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const JoinUsScreen(),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    // Admin Dashboard
+    if (userRole == UserRole.admin) {
+      items.add(_buildDivider());
+      items.add(
+        _buildCardRow(
+          icon: Icons.dashboard_outlined,
+          title: 'Admin Dashboard',
+          onTap: () async {
+            final isAuth = await AuthHelper.requireAuth(context);
+            if (!isAuth) return;
+
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const AdminDashboardScreen(),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    // Developer / Admin tools: Add Reel & Change Inventory
+    if (userRole == UserRole.developer || userRole == UserRole.admin) {
+      items.add(_buildDivider());
+      items.add(
+        _buildCardRow(
+          icon: Icons.movie_creation_outlined,
+          title: 'Add Reel',
+          onTap: () async {
+            final isAuth = await AuthHelper.requireAuth(context);
+            if (!isAuth) return;
+
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const AddReelScreen(),
+              ),
+            );
+          },
+        ),
+      );
+      items.add(_buildDivider());
+      items.add(
+        _buildCardRow(
+          icon: Icons.inventory_2_outlined,
+          title: 'Change Inventory',
+          onTap: () async {
+            final isAuth = await AuthHelper.requireAuth(context);
+            if (!isAuth) return;
+
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const ChangeInventoryScreen(),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    return _buildCardContainer(items);
+  }
+
+  Widget _buildSecondCardGroup() {
+    return _buildCardContainer([
+      _buildCardRow(
+        icon: Icons.info_outline,
+        title: 'About Us',
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AboutUsScreen(),
+            ),
+          );
+        },
+      ),
+      _buildDivider(),
+      _buildCardRow(
+        icon: Icons.shield_outlined,
+        title: 'Privacy Policy',
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const PrivacyPolicyScreen(),
+            ),
+          );
+        },
+      ),
+      _buildDivider(),
+      _buildCardRow(
+        icon: Icons.article_outlined,
+        title: 'Terms and Conditions',
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const TermsConditionsScreen(),
+            ),
+          );
+        },
+      ),
+    ]);
+  }
+
+  Widget _buildCardContainer(List<Widget> children) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141416),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.06),
+          width: 1,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: Column(
+          children: children,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardRow({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              // Circular icon container with red tint & subtle red border
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF221113),
+                  border: Border.all(
+                    color: brandRed.withOpacity(0.35),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  color: brandRed,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // Title
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+
+              // Trailing chevron
+              Icon(
+                Icons.chevron_right,
+                color: Colors.white.withOpacity(0.35),
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDivider() {
+    return Divider(
+      height: 1,
+      thickness: 1,
+      indent: 74,
+      endIndent: 16,
+      color: Colors.white.withOpacity(0.05),
+    );
+  }
+
+  Widget _buildLogoutButton() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      width: double.infinity,
+      height: 52,
+      child: ElevatedButton(
+        onPressed: _handleLogout,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: brandRed,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(26),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(
+              Icons.logout,
+              color: Colors.white,
+              size: 20,
+            ),
+            SizedBox(width: 8),
+            Text(
+              'Logout',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeleteAccountButton() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(60, 0, 60, 12),
+      padding: const EdgeInsets.only(top: 8),
       child: TextButton(
         onPressed: _handleDeleteAccount,
         child: Text(
           'Delete account',
           style: TextStyle(
-            color: Colors.red.shade400,
-            fontSize: 14,
+            color: Colors.white.withOpacity(0.35),
+            fontSize: 13,
             fontWeight: FontWeight.w500,
           ),
         ),
       ),
     );
   }
-
-  Widget _buildLogoutButton(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 60),
-      child: SizedBox(
-        width: double.infinity,
-        height: 48,
-        child: ElevatedButton(
-          onPressed: _handleLogout,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: brandRed,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(25),
-            ),
-            elevation: 0,
-          ),
-          child: const Text(
-            'Logout',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
-
-class _MenuItem extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  const _MenuItem({
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  static const Color brandRed = Color(0xFFE50914);
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-      title: RichText(
-        text: TextSpan(
-          children: [
-            TextSpan(
-              text: title,
-              style: const TextStyle(
-                color: brandRed,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            TextSpan(
-              text: ' $subtitle',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-      trailing: Icon(
-        Icons.chevron_right,
-        color: Colors.white.withOpacity(0.5),
-        size: 24,
-      ),
-    );
-  }
-}
-

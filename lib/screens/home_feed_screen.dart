@@ -1245,6 +1245,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
               builder: (context) => ProjectDetailsScreen(
                 projectId: projectToOpen.id,
                 initialTabIndex: 1, // Open on Episodes tab
+                heroVideoUrl: projectToOpen.advertisementVideoUrl.isNotEmpty
+                    ? projectToOpen.advertisementVideoUrl
+                    : null,
+                initialProject: projectToOpen,
               ),
             ),
           );
@@ -2103,6 +2107,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             builder: (context) => ProjectDetailsScreen(
               projectId: project.id,
               initialTabIndex: 1, // Open on Episodes tab
+              heroVideoUrl: project.advertisementVideoUrl.isNotEmpty
+                  ? project.advertisementVideoUrl
+                  : null,
+              initialProject: project,
             ),
           ),
         );
@@ -2247,6 +2255,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
           MaterialPageRoute(
             builder: (context) => ProjectDetailsScreen(
               projectId: project.id,
+              heroVideoUrl: project.advertisementVideoUrl.isNotEmpty
+                  ? project.advertisementVideoUrl
+                  : null,
+              initialProject: project,
             ),
           ),
         );
@@ -2565,6 +2577,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             builder: (context) => ProjectDetailsScreen(
               projectId: project.id,
               initialTabIndex: 1, // Open on Episodes tab
+              heroVideoUrl: project.advertisementVideoUrl.isNotEmpty
+                  ? project.advertisementVideoUrl
+                  : null,
+              initialProject: project,
             ),
           ),
         );
@@ -2767,6 +2783,11 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             builder: (context) => ProjectDetailsScreen(
               projectId: project?.id,
               initialTabIndex: 1, // Open on Episodes tab
+              heroVideoUrl: (project != null &&
+                      project.advertisementVideoUrl.isNotEmpty)
+                  ? project.advertisementVideoUrl
+                  : null,
+              initialProject: project,
             ),
           ),
         );

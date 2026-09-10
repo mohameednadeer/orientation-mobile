@@ -34,6 +34,9 @@ dependencies:
   sign_in_with_apple: ^6.1.0
   flutter_facebook_auth: ^7.2.0
   screen_protector: ^1.4.3
+  cached_network_image: ^3.4.1
+  app_links: ^7.0.0
+  audioplayers: ^6.7.1
 
 dev_dependencies:
   flutter_test:
@@ -55,6 +58,7 @@ flutter:
     - assets/change_inventory/
     - assets/app_icon/
     - assets/videos/
+    - assets/sounds/
     - assets/menu_header.png
     - assets/orientation_logo.png
 

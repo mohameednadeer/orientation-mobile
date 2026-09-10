@@ -9,6 +9,7 @@ import '../utils/auth_helper.dart';
 import 'episode_player_screen.dart';
 import 'project_details_screen.dart';
 import 'package:share_plus/share_plus.dart';
+import '../widgets/app_toast.dart';
 
 class ProjectsListScreen extends StatefulWidget {
   final String title;
@@ -35,11 +36,19 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
   bool _isLoading = true;
   List<ProjectModel> _projects = [];
   Map<String, bool> _savedProjects = {};
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _loadProjects();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadProjects() async {
@@ -154,22 +163,12 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
       if (isSaved) {
         await _projectApi.unsaveProject(project.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Removed from saved'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          AppToast.showSave(context, isSaved: false);
         }
       } else {
         await _projectApi.saveProject(project.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Saved!'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          AppToast.showSave(context, isSaved: true);
         }
       }
     } catch (e) {
@@ -214,22 +213,44 @@ ${project.script ?? 'Check out this amazing project!'}
 
   @override
   Widget build(BuildContext context) {
+    final filteredProjects = _searchQuery.isEmpty
+        ? _projects
+        : _projects.where((p) {
+            final q = _searchQuery.toLowerCase();
+            return p.title.toLowerCase().contains(q) ||
+                p.developerName.toLowerCase().contains(q) ||
+                p.location.toLowerCase().contains(q) ||
+                p.area.toLowerCase().contains(q);
+          }).toList();
+
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // App bar
-            _buildAppBar(context),
-            // Search bar (optional)
-            if (widget.showSearch) _buildSearchBar(),
-            // Results header
-            _buildResultsHeader(),
-            // List
-            Expanded(
-              child: _buildProjectList(),
-            ),
-          ],
+      backgroundColor: const Color(0xFF0B0B0F),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(-0.85, -0.9),
+            radius: 1.2,
+            colors: [
+              Color(0x1CE50914), // subtle red ambient lighting from top-left
+              Color(0xFF0B0B0F),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // App bar
+              _buildAppBar(context),
+              // Search bar (optional)
+              if (widget.showSearch) _buildSearchBar(),
+              // Results header
+              _buildResultsHeader(filteredProjects.length),
+              // List
+              Expanded(
+                child: _buildProjectList(filteredProjects),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -237,30 +258,51 @@ ${project.script ?? 'Check out this amazing project!'}
 
   Widget _buildAppBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Row(
         children: [
           GestureDetector(
             onTap: () => Navigator.pop(context),
-            child: const Icon(
-              Icons.chevron_left,
-              color: Colors.white,
-              size: 28,
-            ),
-          ),
-          Expanded(
-            child: Center(
-              child: Text(
-                widget.title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
+            child: Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: const Color(0xFF181822),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.09),
+                  width: 1,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: Colors.white,
+                size: 18,
               ),
             ),
           ),
-          const SizedBox(width: 28),
+          Expanded(
+            child: Text(
+              widget.title,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+          const SizedBox(width: 42), // Balance the back button
         ],
       ),
     );
@@ -268,67 +310,154 @@ ${project.script ?? 'Check out this amazing project!'}
 
   Widget _buildSearchBar() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Container(
-        height: 48,
+        height: 50,
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(24),
+          color: const Color(0xFF15151D),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.08),
+            width: 1,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
           children: [
             const SizedBox(width: 16),
-            Icon(
-              Icons.search,
-              color: Colors.white.withOpacity(0.5),
+            const Icon(
+              Icons.search_rounded,
+              color: brandRed,
               size: 22,
             ),
             const SizedBox(width: 12),
             Expanded(
               child: TextField(
+                controller: _searchController,
+                onChanged: (val) {
+                  setState(() {
+                    _searchQuery = val.trim();
+                  });
+                },
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
+                  fontWeight: FontWeight.w500,
                 ),
+                cursorColor: brandRed,
                 decoration: InputDecoration(
                   hintText: 'Search for a project....',
                   hintStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
+                    color: Colors.white.withValues(alpha: 0.35),
                     fontSize: 14,
+                    fontWeight: FontWeight.w400,
                   ),
                   border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
             ),
+            if (_searchQuery.isNotEmpty)
+              GestureDetector(
+                onTap: () {
+                  _searchController.clear();
+                  setState(() {
+                    _searchQuery = '';
+                  });
+                },
+                child: Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    color: Colors.white70,
+                    size: 14,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildResultsHeader() {
+  Widget _buildResultsHeader(int count) {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text(
-            'Results',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 3.5,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: brandRed,
+                  borderRadius: BorderRadius.circular(2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: brandRed.withValues(alpha: 0.5),
+                      blurRadius: 6,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'Results',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Text(
-            '(${_projects.length} Orientation)',
-            style: const TextStyle(
-              color: brandRed,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              color: brandRed.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: brandRed.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    color: brandRed,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '$count Orientation',
+                  style: const TextStyle(
+                    color: brandRed,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -336,69 +465,129 @@ ${project.script ?? 'Check out this amazing project!'}
     );
   }
 
-  Widget _buildProjectList() {
+  Widget _buildProjectList(List<ProjectModel> displayProjects) {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          color: brandRed,
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(
+              color: brandRed,
+              strokeWidth: 2.5,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Loading projects...',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.5),
+                fontSize: 14,
+              ),
+            ),
+          ],
         ),
       );
     }
 
-    if (_projects.isEmpty) {
+    if (displayProjects.isEmpty) {
       return Center(
-        child: Text(
-          'No projects found',
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.6),
-            fontSize: 16,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161620),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(
+                  _searchQuery.isNotEmpty
+                      ? Icons.search_off_rounded
+                      : Icons.movie_filter_outlined,
+                  color: Colors.white.withValues(alpha: 0.4),
+                  size: 34,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _searchQuery.isNotEmpty
+                    ? 'No matching projects found'
+                    : 'No projects found',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _searchQuery.isNotEmpty
+                    ? 'Try searching with a different keyword or area'
+                    : 'Projects for this category will appear here',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.45),
+                  fontSize: 13,
+                ),
+              ),
+            ],
           ),
         ),
       );
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: _projects.length,
+      padding: const EdgeInsets.only(top: 4, bottom: 24),
+      physics: const BouncingScrollPhysics(),
+      itemCount: displayProjects.length,
       itemBuilder: (context, index) {
-        final project = _projects[index];
+        final project = displayProjects[index];
         final gradientColors = project.gradientColors.map((c) {
           final hex = c.replaceAll('0x', '');
           return Color(int.parse(hex, radix: 16));
         }).toList();
-        
+
         final isSaved = _savedProjects[project.id] ?? false;
-        
-        // Use the SAME logic as home screen
-        // Priority: projectThumbnailUrl > logo > image (if not video URL)
-        // Check if image is a video URL (ends with .mp4, .mov, .avi, etc. or contains 'video')
-        final isImageVideo = project.image.toLowerCase().contains('.mp4') || 
-                            project.image.toLowerCase().contains('.mov') || 
-                            project.image.toLowerCase().contains('.avi') ||
-                            project.image.toLowerCase().contains('video');
-        
-        final fallbackImage = (!isImageVideo && project.image.isNotEmpty) ? project.image : 
-                             (project.logo != null && project.logo!.isNotEmpty) ? project.logo! : null;
-        
-        final imageUrl = (project.isAsset && project.projectThumbnailUrl.startsWith('assets/')) 
-            ? null 
-            : (project.projectThumbnailUrl.isNotEmpty ? project.projectThumbnailUrl : fallbackImage);
-        final imageAsset = (project.isAsset && project.projectThumbnailUrl.startsWith('assets/')) 
-            ? (project.projectThumbnailUrl.isNotEmpty ? project.projectThumbnailUrl : 
-               (fallbackImage != null && fallbackImage.startsWith('assets/') ? fallbackImage : null))
+
+        final isImageVideo = project.image.toLowerCase().contains('.mp4') ||
+            project.image.toLowerCase().contains('.mov') ||
+            project.image.toLowerCase().contains('.avi') ||
+            project.image.toLowerCase().contains('video');
+
+        final fallbackImage = (!isImageVideo && project.image.isNotEmpty)
+            ? project.image
+            : (project.logo != null && project.logo!.isNotEmpty)
+                ? project.logo!
+                : null;
+
+        final imageUrl = (project.isAsset &&
+                project.projectThumbnailUrl.startsWith('assets/'))
+            ? null
+            : (project.projectThumbnailUrl.isNotEmpty
+                ? project.projectThumbnailUrl
+                : fallbackImage);
+        final imageAsset = (project.isAsset &&
+                project.projectThumbnailUrl.startsWith('assets/'))
+            ? (project.projectThumbnailUrl.isNotEmpty
+                ? project.projectThumbnailUrl
+                : (fallbackImage != null &&
+                        fallbackImage.startsWith('assets/')
+                    ? fallbackImage
+                    : null))
             : null;
-        
-        print('📋 ProjectsListScreen: Building item for "${project.title}" (id: ${project.id})');
-        print('   projectThumbnailUrl: "${project.projectThumbnailUrl}"');
-        print('   image: "${project.image}"');
-        print('   isAsset: ${project.isAsset}, startsWith assets/: ${project.projectThumbnailUrl.startsWith('assets/')}');
-        print('   Using imageAsset: $imageAsset');
-        print('   Using imageUrl: $imageUrl');
-        
+
         return ProjectListItem(
           projectId: project.id,
           developerName: project.developerName,
           projectName: project.title,
+          location:
+              project.location.isNotEmpty ? project.location : project.area,
           gradientColors: gradientColors,
           isSaved: isSaved,
           imageUrl: imageUrl,

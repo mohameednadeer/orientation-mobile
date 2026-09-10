@@ -22,6 +22,9 @@ class VideoControllerManager extends ChangeNotifier {
 
   int _currentIndex = 0;
   bool _isVisible = true;
+  /// Set to true the moment disposeAll() is called so that any in-flight
+  /// async _initController() calls cannot play or notify after teardown.
+  bool _isDisposed = false;
 
   int get currentIndex => _currentIndex;
   bool get isVisible => _isVisible;
@@ -31,6 +34,7 @@ class VideoControllerManager extends ChangeNotifier {
   bool isInitializing(int index) => _initializing.contains(index);
 
   void setVisible(bool visible) {
+    if (_isDisposed) return;
     _isVisible = visible;
     if (!visible) {
       pauseAll();
@@ -49,6 +53,7 @@ class VideoControllerManager extends ChangeNotifier {
   /// Called whenever the PageView scrolls to a new reel index.
   /// Enforces the strict 3-controller memory pool and immediate audio isolation.
   Future<void> onPageChanged(int newIndex, List<ClipModel> clips) async {
+    if (_isDisposed) return;
     _currentIndex = newIndex;
 
     // 1. Immediately mute and pause ANY other controller synchronously so no audio leaks!
@@ -78,12 +83,12 @@ class VideoControllerManager extends ChangeNotifier {
       pauseAllExcept(newIndex);
       existingController.setLooping(true);
       existingController.setVolume(1.0);
-      if (_isVisible) {
+      if (_isVisible && !_isDisposed) {
         existingController.play().catchError((e) {
           debugPrint('VideoControllerManager: play existing error: $e');
         });
       }
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
     } else if (!_initializing.contains(newIndex) && !_failedIndices.contains(newIndex)) {
       // Need to initialize current controller now
       _initController(
@@ -153,11 +158,14 @@ class VideoControllerManager extends ChangeNotifier {
           : (cachedFile != null
               ? VideoPlayerController.file(
                   cachedFile,
-                  videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+                  // mixWithOthers: false — ensures the OS audio session is
+                  // exclusive; when we dispose/setVolume(0) the audio stops
+                  // immediately at the native layer with zero leak.
+                  videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
                 )
               : VideoPlayerController.networkUrl(
                   Uri.parse(url),
-                  videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+                  videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
                 ));
 
       await controller.initialize().timeout(
@@ -171,8 +179,9 @@ class VideoControllerManager extends ChangeNotifier {
       );
 
       // Verify index is still within active sliding window [currentIndex - 1, currentIndex + 1]
-      if ((index - _currentIndex).abs() > 1) {
-        // User has already scrolled far away while this was initializing; dispose immediately
+      // Also abort if the manager was disposed while we were awaiting initialize().
+      if (_isDisposed || (index - _currentIndex).abs() > 1) {
+        // User has already scrolled far away OR screen was torn down; dispose immediately
         _disposeSingleController(controller);
         return;
       }
@@ -180,12 +189,16 @@ class VideoControllerManager extends ChangeNotifier {
       controller.setLooping(true);
 
       if (index == _currentIndex) {
-        // This is the active reel! Unmute, pause others, and auto-play immediately!
-        controller.setVolume(1.0);
         _controllers[index] = controller;
         pauseAllExcept(index);
-        if (_isVisible) {
+        if (_isVisible && !_isDisposed) {
+          // Unmute and play only if manager is actually visible
+          controller.setVolume(1.0);
           await controller.play();
+        } else {
+          // If not visible or already disposed, ensure it stays completely silent & paused
+          controller.setVolume(0.0);
+          controller.pause();
         }
       } else {
         // Pre-buffered adjacent reel: keep muted & paused!
@@ -201,7 +214,7 @@ class VideoControllerManager extends ChangeNotifier {
         }).catchError((_) {});
       }
 
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
     } catch (e) {
       debugPrint('❌ [VideoControllerManager] Init failed for index=$index: $e');
       _failedIndices.add(index);
@@ -274,7 +287,7 @@ class VideoControllerManager extends ChangeNotifier {
     for (final c in _controllers.values) {
       try {
         c.setVolume(0.0);
-        if (c.value.isInitialized && c.value.isPlaying) {
+        if (c.value.isInitialized) {
           c.pause();
         }
       } catch (_) {}
@@ -288,7 +301,7 @@ class VideoControllerManager extends ChangeNotifier {
       try {
         final c = entry.value;
         c.setVolume(0.0);
-        if (c.value.isInitialized && c.value.isPlaying) {
+        if (c.value.isInitialized) {
           c.pause();
         }
       } catch (_) {}
@@ -315,6 +328,8 @@ class VideoControllerManager extends ChangeNotifier {
 
   void _disposeSingleController(VideoPlayerController c) {
     try {
+      // Immediately mute to prevent any audio leak during async disposal
+      c.setVolume(0.0);
       if (c.value.isInitialized && c.value.isPlaying) {
         c.pause();
       }
@@ -325,6 +340,7 @@ class VideoControllerManager extends ChangeNotifier {
   }
 
   void disposeAll() {
+    _isDisposed = true; // Block any in-flight async callbacks from playing
     for (final c in _controllers.values) {
       _disposeSingleController(c);
     }

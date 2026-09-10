@@ -9,6 +9,7 @@ import '../utils/auth_helper.dart';
 import 'episode_player_screen.dart';
 import 'project_details_screen.dart';
 import 'package:share_plus/share_plus.dart';
+import '../widgets/app_toast.dart';
 
 class LatestForUsScreen extends StatefulWidget {
   const LatestForUsScreen({super.key});
@@ -124,22 +125,12 @@ class _LatestForUsScreenState extends State<LatestForUsScreen> {
       if (isSaved) {
         await _projectApi.unsaveProject(project.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Removed from saved'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          AppToast.showSave(context, isSaved: false);
         }
       } else {
         await _projectApi.saveProject(project.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Saved!'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          AppToast.showSave(context, isSaved: true);
         }
       }
     } catch (e) {
@@ -369,6 +360,8 @@ ${project.script ?? 'Check out this amazing project!'}
           projectId: project.id,
           developerName: project.developerName,
           projectName: project.title,
+          location:
+              project.location.isNotEmpty ? project.location : project.area,
           gradientColors: gradientColors,
           isSaved: isSaved,
           imageUrl: imageUrl,

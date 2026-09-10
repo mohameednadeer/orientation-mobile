@@ -89,13 +89,7 @@ class AuthController extends GetxController {
       debugPrint('🔵 [AuthController] idToken received: ${idToken != null ? "present (${idToken.length} chars)" : "NULL"}');
 
       if (idToken == null) {
-        debugPrint('🔵 [AuthController] Google sign-in was canceled or returned no account.');
-        Get.snackbar(
-          'Google Sign-In',
-          'Sign-in was canceled or no Google account was selected.',
-          snackPosition: SnackPosition.BOTTOM,
-          duration: const Duration(seconds: 3),
-        );
+        debugPrint('🔵 [AuthController] Google sign-in was canceled by user.');
         return;
       }
 
@@ -104,18 +98,37 @@ class AuthController extends GetxController {
       debugPrint('✅ [AuthController] Google sign-in complete!');
     } catch (e, stackTrace) {
       debugPrint('❌❌❌ [AuthController] signInWithGoogle ERROR: $e');
-      debugPrint('❌❌❌ [AuthController] ERROR TYPE: ${e.runtimeType}');
-      debugPrint('❌❌❌ [AuthController] STACK TRACE: $stackTrace');
+      final errorStr = e.toString().toLowerCase();
 
-      final errorMsg = e.toString().replaceFirst('Exception: ', '');
-      errorMessage.value = errorMsg;
+      // If user canceled, do not frighten the user with any error dialog/snackbar
+      if (errorStr.contains('cancel') || errorStr.contains('12501')) {
+        debugPrint('🔵 [AuthController] Google sign-in cancellation ignored.');
+        return;
+      }
+
+      // Friendly user-facing message instead of raw exception
+      final friendlyMsg = errorStr.contains('network') ||
+              errorStr.contains('socket') ||
+              errorStr.contains('connection')
+          ? 'Network error. Please check your connection and try again.'
+          : 'Unable to sign in with Google right now. Please try again.';
+
+      errorMessage.value = friendlyMsg;
+
       Get.snackbar(
-        'Google Login Failed',
-        errorMsg,
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFFD32F2F),
-        colorText: const Color(0xFFFFFFFF),
-        duration: const Duration(seconds: 5),
+        'Google Sign-In',
+        friendlyMsg,
+        snackPosition: SnackPosition.TOP,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        borderRadius: 16,
+        backgroundColor: const Color(0xFF1E1E26),
+        colorText: Colors.white,
+        icon: const Icon(
+          Icons.info_outline_rounded,
+          color: Color(0xFFE50914),
+          size: 22,
+        ),
+        duration: const Duration(seconds: 4),
       );
     } finally {
       isGoogleLoading.value = false;

@@ -22,6 +22,63 @@ class _MainScreenState extends State<MainScreen> {
       GlobalKey<State<HomeFeedScreen>>();
   DateTime? _lastBackPress;
 
+  Future<void> _handleTabSelection(int index) async {
+    // Home tab (index 0) - no auth required
+    if (index == 0) {
+      // Update clips visibility
+      if (_currentIndex == 1) {
+        // Leaving clips tab - make invisible
+        _clipsKey.currentState?.setVisible(false);
+      }
+
+      // Refresh continue watching when returning to Home tab
+      if (_currentIndex != 0) {
+        final homeState = _homeKey.currentState;
+        if (homeState != null) {
+          // Call refresh method using dynamic to avoid type checking issues
+          (homeState as dynamic).refreshContinueWatching();
+          // Resume home videos when returning to Home tab
+          (homeState as dynamic).resumeVideos();
+        }
+      }
+
+      setState(() {
+        _loadedTabs.add(0);
+        _currentIndex = index;
+      });
+      return;
+    }
+
+    // Pause home videos when leaving Home tab
+    if (_currentIndex == 0) {
+      final homeState = _homeKey.currentState;
+      if (homeState != null) {
+        (homeState as dynamic).pauseVideos();
+      }
+    }
+
+    // Clips, News, or Account tabs - require auth
+    final isAuth = await AuthHelper.requireAuth(context);
+    if (!isAuth) return;
+    if (!mounted) return;
+
+    // Mark tab as loaded
+    _loadedTabs.add(index);
+
+    // Update clips visibility
+    if (index == 1) {
+      // Going to clips tab - make visible
+      _clipsKey.currentState?.setVisible(true);
+    } else if (_currentIndex == 1) {
+      // Leaving clips tab - make invisible
+      _clipsKey.currentState?.setVisible(false);
+    }
+
+    setState(() {
+      _currentIndex = index;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -35,11 +92,9 @@ class _MainScreenState extends State<MainScreen> {
           return;
         }
 
-        // If we're not on Home tab, navigate to Home
+        // If we're not on Home tab, navigate to Home properly (pausing clips, etc.)
         if (_currentIndex != 0) {
-          setState(() {
-            _currentIndex = 0;
-          });
+          await _handleTabSelection(0);
           return;
         }
 
@@ -69,7 +124,10 @@ class _MainScreenState extends State<MainScreen> {
           children: [
             HomeFeedScreen(key: _homeKey),
             _loadedTabs.contains(1)
-                ? ClipsScreen(key: _clipsKey)
+                ? ClipsScreen(
+                    key: _clipsKey,
+                    onBackToHome: () => _handleTabSelection(0),
+                  )
                 : const SizedBox.shrink(),
             _loadedTabs.contains(2)
                 ? const NewsScreen()
@@ -89,62 +147,7 @@ class _MainScreenState extends State<MainScreen> {
         ),
         bottomNavigationBar: BottomNavBar(
           currentIndex: _currentIndex,
-          onTap: (index) async {
-            // Home tab (index 0) - no auth required
-            if (index == 0) {
-              // Update clips visibility
-              if (_currentIndex == 1) {
-                // Leaving clips tab - make invisible
-                _clipsKey.currentState?.setVisible(false);
-              }
-
-              // Refresh continue watching when returning to Home tab
-              if (_currentIndex != 0) {
-                final homeState = _homeKey.currentState;
-                if (homeState != null) {
-                  // Call refresh method using dynamic to avoid type checking issues
-                  (homeState as dynamic).refreshContinueWatching();
-                  // Resume home videos when returning to Home tab
-                  (homeState as dynamic).resumeVideos();
-                }
-              }
-
-              setState(() {
-                _loadedTabs.add(0);
-                _currentIndex = index;
-              });
-              return;
-            }
-
-            // Pause home videos when leaving Home tab
-            if (_currentIndex == 0) {
-              final homeState = _homeKey.currentState;
-              if (homeState != null) {
-                (homeState as dynamic).pauseVideos();
-              }
-            }
-
-            // Clips, News, or Account tabs - require auth
-            final isAuth = await AuthHelper.requireAuth(context);
-            if (!isAuth) return;
-            if (!mounted) return;
-
-            // Mark tab as loaded
-            _loadedTabs.add(index);
-
-            // Update clips visibility
-            if (index == 1) {
-              // Going to clips tab - make visible
-              _clipsKey.currentState?.setVisible(true);
-            } else if (_currentIndex == 1) {
-              // Leaving clips tab - make invisible
-              _clipsKey.currentState?.setVisible(false);
-            }
-
-            setState(() {
-              _currentIndex = index;
-            });
-          },
+          onTap: (index) => _handleTabSelection(index),
         ),
       ),
     );

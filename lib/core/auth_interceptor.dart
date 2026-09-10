@@ -18,9 +18,7 @@ class AuthInterceptor extends QueuedInterceptor {
 
   AuthInterceptor({
     required Dio dio,
-    FlutterSecureStorage storage = const FlutterSecureStorage(
-      aOptions: AndroidOptions(encryptedSharedPreferences: true),
-    ),
+    FlutterSecureStorage storage = const FlutterSecureStorage(),
   })  : _dio = dio,
         _storage = storage;
 
@@ -29,6 +27,11 @@ class AuthInterceptor extends QueuedInterceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
+    // For FormData (multipart), do not force JSON Content-Type; Dio sets multipart/form-data
+    if (options.data is FormData) {
+      options.headers.remove('Content-Type');
+    }
+
     // Attach token if not already present
     if (!options.headers.containsKey('Authorization')) {
       final token = await _getAccessToken();

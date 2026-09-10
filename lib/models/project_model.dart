@@ -89,10 +89,18 @@ class ProjectModel {
       }
     }
 
-    // hasVideo derived from heroVideoUrl (API has heroVideoUrl)
+    // hasVideo derived from heroVideoUrl / adUrl / videoUrl (API field variations)
     bool? hasVideo;
-    final heroVideoUrl = json['heroVideoUrl'] ?? json['advertisementVideoUrl'] ?? '';
-    if (heroVideoUrl.isNotEmpty) {
+    final rawHero = json['heroVideoUrl'] ??
+        json['advertisementVideoUrl'] ??
+        json['adUrl'] ??
+        json['ad_url'] ??
+        json['videoUrl'] ??
+        json['video'] ??
+        json['promotionalVideoUrl'] ??
+        '';
+    final heroVideoUrl = rawHero.toString().trim();
+    if (heroVideoUrl.isNotEmpty && heroVideoUrl != 'null' && heroVideoUrl != 'PENDING') {
       hasVideo = true;
     } else {
       hasVideo = json['hasVideo'] as bool?;

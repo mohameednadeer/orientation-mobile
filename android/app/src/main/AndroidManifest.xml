@@ -42,6 +42,24 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- Deep Linking Intent Filter for https://orientation.app/reels/* -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="orientation.app" android:pathPrefix="/reels" />
+                <data android:scheme="https" android:host="orientationapps.com" android:pathPrefix="/reels" />
+                <data android:scheme="http" android:host="orientation.app" android:pathPrefix="/reels" />
+            </intent-filter>
+
+            <!-- Custom Scheme Intent Filter for orientation://reels/* -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="orientation" android:host="reels" />
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

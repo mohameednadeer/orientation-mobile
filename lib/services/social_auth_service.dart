@@ -58,25 +58,23 @@ class SocialAuthService {
 
       return idToken;
     } catch (e, stackTrace) {
-      debugPrint('❌❌❌ [GoogleSignIn] ERROR: $e');
-      debugPrint('❌❌❌ [GoogleSignIn] ERROR TYPE: ${e.runtimeType}');
-      debugPrint('❌❌❌ [GoogleSignIn] STACK TRACE: $stackTrace');
+      debugPrint('🔵 [GoogleSignIn] Exception in signInWithGoogle: $e');
 
       if (e is GoogleSignInException) {
-        debugPrint('❌❌❌ [GoogleSignIn] Code: ${e.code}');
-        debugPrint('❌❌❌ [GoogleSignIn] Description: ${e.description}');
-        debugPrint('❌❌❌ [GoogleSignIn] Details: ${e.details}');
-
-        // If there's an underlying description or details, surface them explicitly
-        final detailMsg = e.description ?? e.details?.toString() ?? e.code.name;
-        if (e.code != GoogleSignInExceptionCode.canceled) {
-          throw Exception('Google Sign-In failed: $detailMsg');
+        debugPrint('🔑 [GoogleSignIn] GoogleSignInException Code: ${e.code}');
+        if (e.code == GoogleSignInExceptionCode.canceled) {
+          debugPrint('🔑 [GoogleSignIn] User canceled account selection');
+          return null;
         }
+        final detailMsg = e.description ?? e.details?.toString() ?? e.code.name;
+        throw Exception('Google Sign-In failed: $detailMsg');
       }
 
       final errorStr = e.toString().toLowerCase();
       // Only treat as silent cancel if it was purely a user dismissal with no error payload
-      if (errorStr.contains('12501') || errorStr == 'googlesigninexception(code: canceled)') {
+      if (errorStr.contains('cancel') ||
+          errorStr.contains('12501') ||
+          errorStr.contains('interrupted')) {
         debugPrint('🔑 [GoogleSignIn] User canceled account selection');
         return null;
       }

@@ -1,15 +1,23 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 import 'auth_interceptor.dart';
 
+/// Result of checking authentication status on app startup.
+enum AuthStatus {
+  /// User has a valid session (tokens refreshed or cached locally).
+  authenticated,
+
+  /// No stored tokens or refresh token was rejected by server (401/403).
+  unauthenticated,
+}
+
 /// Central API Client configuring Dio with timeouts, headers, and authentication interceptors.
 class ApiClient {
   static const String baseUrl = ApiConfig.baseUrl;
-  static const FlutterSecureStorage _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-  );
+  static const FlutterSecureStorage _storage = FlutterSecureStorage();
 
   static final Dio dio = Dio(
     BaseOptions(
@@ -122,5 +130,87 @@ class ApiClient {
     try {
       await _storage.deleteAll();
     } catch (_) {}
+  }
+
+  /// ─── Session Restoration (Splash Screen) ───────────────────────────────
+  ///
+  /// Called on cold app start to determine whether the user should be sent
+  /// to MainScreen (still logged in) or LoginScreen (session expired).
+  ///
+  /// Flow:
+  /// 1. Read refreshToken from secure storage.
+  /// 2. If absent → [AuthStatus.unauthenticated].
+  /// 3. If present → POST /auth/refresh with a CLEAN Dio (no interceptor loop).
+  /// 4. If 200 → save rotated tokens → [AuthStatus.authenticated].
+  /// 5. If 401/403 → clear tokens → [AuthStatus.unauthenticated].
+  /// 6. If network error → trust cached token → [AuthStatus.authenticated].
+  static Future<AuthStatus> checkAuthStatus() async {
+    try {
+      // 1. Read stored refresh token
+      final refreshToken = await getRefreshToken();
+      if (refreshToken == null || refreshToken.isEmpty) {
+        debugPrint('🔑 [checkAuthStatus] No refresh token found → unauthenticated');
+        return AuthStatus.unauthenticated;
+      }
+
+      // 2. Attempt token refresh with a CLEAN Dio instance (avoids interceptor recursion)
+      final cleanDio = Dio(
+        BaseOptions(
+          baseUrl: baseUrl,
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      debugPrint('🔄 [checkAuthStatus] Attempting POST /auth/refresh...');
+      final response = await cleanDio.post(
+        '/auth/refresh',
+        data: {'refreshToken': refreshToken},
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = response.data;
+        if (data is Map) {
+          final newAccessToken =
+              data['accessToken']?.toString() ?? data['token']?.toString();
+          final newRefreshToken =
+              data['refreshToken']?.toString() ?? refreshToken;
+
+          if (newAccessToken != null && newAccessToken.isNotEmpty) {
+            await saveTokens(
+              accessToken: newAccessToken,
+              refreshToken:
+                  (newRefreshToken.isNotEmpty) ? newRefreshToken : refreshToken,
+            );
+            debugPrint('✅ [checkAuthStatus] Tokens refreshed → authenticated');
+            return AuthStatus.authenticated;
+          }
+        }
+      }
+
+      // Unexpected response shape
+      debugPrint('⚠️ [checkAuthStatus] Unexpected refresh response → unauthenticated');
+      return AuthStatus.unauthenticated;
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      if (statusCode == 401 || statusCode == 403) {
+        // Server explicitly rejected the refresh token → session is dead
+        debugPrint('🚫 [checkAuthStatus] Refresh rejected ($statusCode) → clearing tokens');
+        await clearTokens();
+        return AuthStatus.unauthenticated;
+      }
+
+      // Network error / timeout → trust the cached session (offline-friendly)
+      debugPrint('📡 [checkAuthStatus] Network error during refresh → trusting cached session');
+      return AuthStatus.authenticated;
+    } catch (e) {
+      // Unknown error → trust cached session
+      debugPrint('❌ [checkAuthStatus] Unexpected error: $e → trusting cached session');
+      return AuthStatus.authenticated;
+    }
   }
 }

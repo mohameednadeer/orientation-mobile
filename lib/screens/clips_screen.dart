@@ -542,7 +542,8 @@ class ClipApi {
 
 /// Clips tab screen - loads reels and displays ReelsScreen.
 class ClipsScreen extends StatefulWidget {
-  const ClipsScreen({super.key});
+  final VoidCallback? onBackToHome;
+  const ClipsScreen({super.key, this.onBackToHome});
 
   @override
   ClipsScreenState createState() => ClipsScreenState();
@@ -553,6 +554,7 @@ class ClipsScreenState extends State<ClipsScreen> {
   List<ClipModel> _clips = [];
   bool _isLoading = true;
   bool _hasLoadedOnce = false;
+  bool _isActive = true;
 
   @override
   void initState() {
@@ -603,6 +605,7 @@ class ClipsScreenState extends State<ClipsScreen> {
   }
 
   void setVisible(bool visible) {
+    _isActive = visible;
     _reelsKey.currentState?.setVisible(visible);
     if (visible && (!_hasLoadedOnce || _clips.isEmpty)) {
       _hasLoadedOnce = true;
@@ -658,7 +661,8 @@ class ClipsScreenState extends State<ClipsScreen> {
       key: _reelsKey,
       clips: _clips,
       initialIndex: 0,
-      initialVisible: true,
+      initialVisible: _isActive,
+      onBack: widget.onBackToHome,
     );
   }
 }

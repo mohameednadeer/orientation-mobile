@@ -81,6 +81,16 @@
 				<string>com.googleusercontent.apps.YOUR_REVERSED_CLIENT_ID</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>orientation.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>orientation</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>
