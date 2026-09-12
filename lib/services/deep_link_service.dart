@@ -1,20 +1,26 @@
 import 'dart:async';
 import 'package:app_links/app_links.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../models/clip_model.dart';
 import '../services/clip_service.dart';
 import '../reels/reels_screen.dart';
+import '../screens/project_details_screen.dart';
 
 /// Centralized deep linking service using AppLinks.
 /// Handles external URLs such as:
-/// - https://orientation.app/reels/:id
+/// - https://orientationapps.com/project/:id
+/// - https://orientationapps.com/projects/:id
 /// - https://orientationapps.com/reels/:id
+/// - orientation://project/:id
 /// - orientation://reels/:id
 class DeepLinkService {
-  static final DeepLinkService _instance = DeepLinkService._internal();
-  factory DeepLinkService() => _instance;
+  static final DeepLinkService instance = DeepLinkService._internal();
+  factory DeepLinkService() => instance;
   DeepLinkService._internal();
+
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
 
   final AppLinks _appLinks = AppLinks();
   StreamSubscription<Uri>? _linkSubscription;
@@ -23,14 +29,16 @@ class DeepLinkService {
   /// Initializes deep link listeners for both cold start and warm foreground/background launches.
   Future<void> init() async {
     try {
-      // 1. Check for initial link when app launched via deep link
+      // 1. Check for initial link when app launched via deep link (Cold Start)
       final initialUri = await _appLinks.getInitialLink();
       if (initialUri != null) {
         debugPrint('🔗 [DeepLinkService] Cold start link detected: $initialUri');
-        _handleUri(initialUri);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _handleUri(initialUri);
+        });
       }
 
-      // 2. Listen to subsequent deep links while app is running
+      // 2. Listen to subsequent deep links while app is running (Warm Start)
       _linkSubscription = _appLinks.uriLinkStream.listen(
         (uri) {
           debugPrint('🔗 [DeepLinkService] Stream link received: $uri');
@@ -46,25 +54,43 @@ class DeepLinkService {
   }
 
   void _handleUri(Uri uri) {
-    debugPrint('🔗 [DeepLinkService] Parsing URI: scheme=${uri.scheme}, host=${uri.host}, path=${uri.path}');
+    debugPrint(
+        '🔗 [DeepLinkService] Parsing URI: scheme=${uri.scheme}, host=${uri.host}, path=${uri.path}');
 
-    String? clipId;
-
-    // Pattern 1: https://orientation.app/reels/:id or https://orientationapps.com/reels/:id
-    final segments = uri.pathSegments;
-    if (segments.isNotEmpty && segments[0].toLowerCase() == 'reels' && segments.length >= 2) {
-      clipId = segments[1];
-    }
-    // Pattern 2: orientation://reels/:id
-    else if (uri.scheme.toLowerCase() == 'orientation' && uri.host.toLowerCase() == 'reels') {
-      if (segments.isNotEmpty) {
-        clipId = segments[0];
+    List<String> segments = [];
+    if (uri.scheme.toLowerCase() == 'orientation') {
+      if (uri.host.isNotEmpty) {
+        segments = [uri.host, ...uri.pathSegments];
+      } else {
+        segments = uri.pathSegments;
       }
+    } else {
+      segments = uri.pathSegments;
     }
 
-    if (clipId != null && clipId.isNotEmpty) {
-      debugPrint('🎬 [DeepLinkService] Extracted target reel ID: $clipId');
-      _navigateToReel(clipId);
+    if (segments.length < 2) return;
+    final resourceType = segments[0].toLowerCase();
+    final resourceId = segments[1];
+    if (resourceId.isEmpty) return;
+
+    if (resourceType == 'project' || resourceType == 'projects') {
+      debugPrint('🚀 [DeepLinkService] Opening Project: $resourceId');
+      _navigateToProject(resourceId);
+    } else if (resourceType == 'reels' || resourceType == 'reel') {
+      debugPrint('🎬 [DeepLinkService] Opening Reel: $resourceId');
+      _navigateToReel(resourceId);
+    }
+  }
+
+  void _navigateToProject(String projectId) {
+    if (navigatorKey.currentState != null) {
+      navigatorKey.currentState!.push(
+        MaterialPageRoute(
+          builder: (_) => ProjectDetailsScreen(projectId: projectId),
+        ),
+      );
+    } else {
+      Get.to(() => ProjectDetailsScreen(projectId: projectId));
     }
   }
 
@@ -73,8 +99,7 @@ class DeepLinkService {
     _isHandling = true;
 
     try {
-      // Small delay to ensure Flutter widget tree / GetMaterialApp is mounted
-      await Future.delayed(const Duration(milliseconds: 400));
+      await Future.delayed(const Duration(milliseconds: 300));
 
       ClipService? clipService;
       if (Get.isRegistered<ClipService>()) {
@@ -96,7 +121,6 @@ class DeepLinkService {
           debugPrint('⚠️ [DeepLinkService] Error loading clip list: $e');
         }
 
-        // If not found in page 1, fetch single clip by ID
         if (targetClip == null) {
           try {
             targetClip = await clipService.getClipById(clipId);
@@ -113,14 +137,23 @@ class DeepLinkService {
         final targetIndex = clips.indexWhere((c) => c.id == clipId);
         final initialIndex = targetIndex != -1 ? targetIndex : 0;
 
-        debugPrint('🚀 [DeepLinkService] Navigating to ReelsScreen with clip: $clipId at index $initialIndex');
-        Get.to(() => ReelsScreen(
-          clips: clips,
-          initialIndex: initialIndex,
-          initialVisible: true,
-        ));
-      } else {
-        debugPrint('⚠️ [DeepLinkService] Could not resolve clip model for ID: $clipId');
+        if (navigatorKey.currentState != null) {
+          navigatorKey.currentState!.push(
+            MaterialPageRoute(
+              builder: (_) => ReelsScreen(
+                clips: clips,
+                initialIndex: initialIndex,
+                initialVisible: true,
+              ),
+            ),
+          );
+        } else {
+          Get.to(() => ReelsScreen(
+                clips: clips,
+                initialIndex: initialIndex,
+                initialVisible: true,
+              ));
+        }
       }
     } catch (e) {
       debugPrint('❌ [DeepLinkService] Navigation error: $e');

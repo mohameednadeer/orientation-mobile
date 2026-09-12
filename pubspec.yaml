@@ -52,6 +52,7 @@ flutter:
     - assets/icons/
     - assets/images/
     - assets/icons_bottom_navigation_bar/
+    - assets/courses/
     - assets/developers/
     - assets/top10/
     - assets/icons_clips/

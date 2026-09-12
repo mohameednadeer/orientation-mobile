@@ -24,7 +24,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -43,22 +43,39 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
-            <!-- Deep Linking Intent Filter for https://orientation.app/reels/* -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="orientation.app" android:pathPrefix="/reels" />
-                <data android:scheme="https" android:host="orientationapps.com" android:pathPrefix="/reels" />
-                <data android:scheme="http" android:host="orientation.app" android:pathPrefix="/reels" />
-            </intent-filter>
-
-            <!-- Custom Scheme Intent Filter for orientation://reels/* -->
+            <!-- 1. Custom URL Scheme (orientation://project/:id & orientation://reels/:id) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="orientation" android:host="reels" />
+                <data android:scheme="orientation" />
+            </intent-filter>
+
+            <!-- 2. Android App Links (https://orientationapps.com/...) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="orientationapps.com"
+                    android:pathPrefix="/project" />
+                <data
+                    android:scheme="https"
+                    android:host="orientationapps.com"
+                    android:pathPrefix="/projects" />
+                <data
+                    android:scheme="https"
+                    android:host="orientationapps.com"
+                    android:pathPrefix="/reels" />
+                <data
+                    android:scheme="https"
+                    android:host="orientation.app"
+                    android:pathPrefix="/reels" />
+                <data
+                    android:scheme="http"
+                    android:host="orientation.app"
+                    android:pathPrefix="/reels" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

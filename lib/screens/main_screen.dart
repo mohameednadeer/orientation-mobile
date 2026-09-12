@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../utils/auth_helper.dart';
 import 'home_feed_screen.dart';
+import 'courses_screen.dart';
 import 'clips_screen.dart';
 import 'news_screen.dart';
 import 'account_screen.dart';
@@ -26,7 +27,7 @@ class _MainScreenState extends State<MainScreen> {
     // Home tab (index 0) - no auth required
     if (index == 0) {
       // Update clips visibility
-      if (_currentIndex == 1) {
+      if (_currentIndex == 2) {
         // Leaving clips tab - make invisible
         _clipsKey.currentState?.setVisible(false);
       }
@@ -49,6 +50,28 @@ class _MainScreenState extends State<MainScreen> {
       return;
     }
 
+    // Courses tab (index 1) - no auth required to browse
+    if (index == 1) {
+      // Update clips visibility
+      if (_currentIndex == 2) {
+        _clipsKey.currentState?.setVisible(false);
+      }
+
+      // Pause home videos when leaving Home tab
+      if (_currentIndex == 0) {
+        final homeState = _homeKey.currentState;
+        if (homeState != null) {
+          (homeState as dynamic).pauseVideos();
+        }
+      }
+
+      setState(() {
+        _loadedTabs.add(1);
+        _currentIndex = index;
+      });
+      return;
+    }
+
     // Pause home videos when leaving Home tab
     if (_currentIndex == 0) {
       final homeState = _homeKey.currentState;
@@ -57,7 +80,7 @@ class _MainScreenState extends State<MainScreen> {
       }
     }
 
-    // Clips, News, or Account tabs - require auth
+    // Clips (2), News (3), or Account (4) tabs - require auth
     final isAuth = await AuthHelper.requireAuth(context);
     if (!isAuth) return;
     if (!mounted) return;
@@ -66,10 +89,10 @@ class _MainScreenState extends State<MainScreen> {
     _loadedTabs.add(index);
 
     // Update clips visibility
-    if (index == 1) {
+    if (index == 2) {
       // Going to clips tab - make visible
       _clipsKey.currentState?.setVisible(true);
-    } else if (_currentIndex == 1) {
+    } else if (_currentIndex == 2) {
       // Leaving clips tab - make invisible
       _clipsKey.currentState?.setVisible(false);
     }
@@ -122,17 +145,23 @@ class _MainScreenState extends State<MainScreen> {
         body: IndexedStack(
           index: _currentIndex,
           children: [
-            HomeFeedScreen(key: _homeKey),
+            HomeFeedScreen(
+              key: _homeKey,
+              onNavigateToTab: (idx) => _handleTabSelection(idx),
+            ),
             _loadedTabs.contains(1)
+                ? const CoursesScreen()
+                : const SizedBox.shrink(),
+            _loadedTabs.contains(2)
                 ? ClipsScreen(
                     key: _clipsKey,
                     onBackToHome: () => _handleTabSelection(0),
                   )
                 : const SizedBox.shrink(),
-            _loadedTabs.contains(2)
+            _loadedTabs.contains(3)
                 ? const NewsScreen()
                 : const SizedBox.shrink(),
-            _loadedTabs.contains(3)
+            _loadedTabs.contains(4)
                 ? AccountScreen(
                     onProfileUpdated: () {
                       // Refresh user name in HomeFeedScreen
@@ -148,28 +177,6 @@ class _MainScreenState extends State<MainScreen> {
         bottomNavigationBar: BottomNavBar(
           currentIndex: _currentIndex,
           onTap: (index) => _handleTabSelection(index),
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaceholderScreen extends StatelessWidget {
-  final String title;
-
-  const _PlaceholderScreen({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(
-        child: Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 24,
-          ),
         ),
       ),
     );

@@ -28,7 +28,7 @@ class ReelsService {
   /// TTL: 30 minutes in RAM.
   Future<List<ClipModel>> getReels({
     int page = 1,
-    int limit = 20,
+    int limit = 10,
     bool forceRefresh = false,
   }) async {
     return _cache.getCached<List<ClipModel>>(

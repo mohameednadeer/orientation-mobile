@@ -120,7 +120,7 @@ class ImprovedClipApi {
   /// If backend doesn't support pagination, it will handle pagination in memory
   Future<List<ClipModel>> getAllClips({
     int page = 1,
-    int limit = 20,
+    int limit = 10,
     bool forceRefresh = false,
   }) async {
     final cacheKey = 'all_clips_page_${page}_limit_$limit';
@@ -307,32 +307,65 @@ class ImprovedClipApi {
   /// Get a single clip by ID
   Future<ClipModel?> getClipById(String clipId,
       {bool forceRefresh = false}) async {
-    // Check cache first
+    final sanitizedId = clipId.trim();
+    if (sanitizedId.isEmpty) {
+      debugPrint('⚠️ ImprovedClipApi: getClipById called with empty clipId');
+      return null;
+    }
+
+    // Check cache first — but only accept cache if it contains a valid, playable videoUrl!
     if (!forceRefresh &&
-        _isCacheValid(clipId) &&
-        _clipCache.containsKey(clipId)) {
-      debugPrint('⚡ ImprovedClipApi: Returning clip $clipId from cache');
-      return _clipCache.get(clipId);
+        _isCacheValid(sanitizedId) &&
+        _clipCache.containsKey(sanitizedId)) {
+      final cached = _clipCache.get(sanitizedId);
+      if (cached != null && cached.videoUrl.isNotEmpty) {
+        debugPrint(
+            '⚡ ImprovedClipApi: Returning clip $sanitizedId from cache (videoUrl present)');
+        return cached;
+      }
     }
 
     try {
-      final response = await _dioClient.dio.get('/reels/$clipId');
-      final clip = ClipModel.fromJson(response.data as Map<String, dynamic>);
+      debugPrint('📡 [ImprovedClipApi] Sending GET /reels/$sanitizedId ...');
+      final response = await _dioClient.dio.get('/reels/$sanitizedId');
+      final data = response.data;
+
+      Map<String, dynamic> clipJson;
+      if (data is Map) {
+        final map = Map<String, dynamic>.from(data);
+        if (map.containsKey('reel') && map['reel'] is Map) {
+          clipJson = Map<String, dynamic>.from(map['reel'] as Map);
+        } else if (map.containsKey('data') && map['data'] is Map) {
+          clipJson = Map<String, dynamic>.from(map['data'] as Map);
+        } else {
+          clipJson = map;
+        }
+      } else {
+        throw Exception(
+            'Unexpected response format for reel $sanitizedId: $data');
+      }
+
+      final clip = ClipModel.fromJson(clipJson);
 
       // Update cache
-      _clipCache.put(clipId, clip);
-      _updateCacheTimestamp(clipId);
+      _clipCache.put(sanitizedId, clip);
+      _updateCacheTimestamp(sanitizedId);
 
       // Sync liked status
       await _syncLikedStatus([clip]);
 
+      debugPrint(
+          '✅ [ImprovedClipApi] Successfully fetched reel $sanitizedId: title="${clip.title}", videoUrl="${clip.videoUrl}"');
       return clip;
     } catch (e) {
-      debugPrint('❌ ImprovedClipApi: Error fetching clip $clipId: $e');
+      debugPrint('❌ ImprovedClipApi: Error fetching clip $sanitizedId: $e');
 
-      // Return from cache if available (even if expired)
-      if (_clipCache.containsKey(clipId)) {
-        return _clipCache.get(clipId);
+      // Return from cache if available (even if expired) provided it has a videoUrl
+      if (_clipCache.containsKey(sanitizedId)) {
+        final fallback = _clipCache.get(sanitizedId);
+        if (fallback != null && fallback.videoUrl.isNotEmpty) {
+          return fallback;
+        }
       }
 
       return null;

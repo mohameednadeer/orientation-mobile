@@ -31,7 +31,8 @@ import 'login_screen.dart';
 import '../services/user_service.dart';
 
 class HomeFeedScreen extends StatefulWidget {
-  const HomeFeedScreen({super.key});
+  final ValueChanged<int>? onNavigateToTab;
+  const HomeFeedScreen({super.key, this.onNavigateToTab});
 
   @override
   State<HomeFeedScreen> createState() => _HomeFeedScreenState();
@@ -463,7 +464,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                           minWidth: double.infinity,
                         ),
                         child: Image.asset(
-                          'assets/images/welcome_promo.jpg',
+                          'assets/images/welcome_promo_2.jpeg',
                           fit: BoxFit.cover,
                           width: double.infinity,
                         ),
@@ -851,6 +852,11 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
       drawer: AppDrawer(
         key: _drawerKey,
         onScrollToUpcoming: scrollToUpcomingProjects,
+        onNavigateToCourses: () {
+          if (widget.onNavigateToTab != null) {
+            widget.onNavigateToTab!(1);
+          }
+        },
       ),
       onDrawerChanged: (isOpened) {
         if (isOpened) {
@@ -896,7 +902,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             child: VisibilityDetector(
               key: const Key('section_free_projects'),
               onVisibilityChanged: (info) {
-                if (info.visibleFraction > 0.1 && !_hasLoadedFreeProjects) {
+                if (info.visibleFraction > 0.5 && !_hasLoadedFreeProjects) {
                   _loadFreeProjectsLazy();
                 }
               },
@@ -947,7 +953,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             child: VisibilityDetector(
               key: const Key('section_top10'),
               onVisibilityChanged: (info) {
-                if (info.visibleFraction > 0.1 && !_hasLoadedTop10) {
+                if (info.visibleFraction > 0.5 && !_hasLoadedTop10) {
                   _loadTop10Lazy();
                 }
               },
@@ -975,7 +981,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             child: VisibilityDetector(
               key: const Key('section_new_cairo'),
               onVisibilityChanged: (info) {
-                if (info.visibleFraction > 0.1 && !_hasLoadedNewCairo) {
+                if (info.visibleFraction > 0.5 && !_hasLoadedNewCairo) {
                   _loadNewCairoLazy();
                 }
               },
@@ -1005,7 +1011,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             child: VisibilityDetector(
               key: const Key('section_october'),
               onVisibilityChanged: (info) {
-                if (info.visibleFraction > 0.1 && !_hasLoadedOctober) {
+                if (info.visibleFraction > 0.5 && !_hasLoadedOctober) {
                   _loadOctoberLazy();
                 }
               },
@@ -1036,7 +1042,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             child: VisibilityDetector(
               key: const Key('section_upcoming'),
               onVisibilityChanged: (info) {
-                if (info.visibleFraction > 0.1 && !_hasLoadedUpcoming) {
+                if (info.visibleFraction > 0.5 && !_hasLoadedUpcoming) {
                   _loadUpcomingLazy();
                 }
               },
@@ -1054,7 +1060,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             child: VisibilityDetector(
               key: const Key('section_discover_areas'),
               onVisibilityChanged: (info) {
-                if (info.visibleFraction > 0.1 && !_hasLoadedAreas) {
+                if (info.visibleFraction > 0.5 && !_hasLoadedAreas) {
                   _loadAreasLazy();
                 }
               },

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import '../core/api_client.dart';
 import '../models/user_model.dart';
 import '../utils/api_error_extractor.dart';
@@ -168,15 +169,29 @@ class AuthService {
   }
 
   /// POST /auth/refresh
-  /// Body: { refreshToken }
+  /// Header: Authorization: Bearer <refreshToken>
   static Future<bool> refreshTokens() async {
     final refreshToken = await ApiClient.getRefreshToken();
     if (refreshToken == null || refreshToken.isEmpty) return false;
 
     try {
-      final response = await ApiClient.dio.post(
+      final refreshDio = Dio(
+        BaseOptions(
+          baseUrl: ApiClient.baseUrl,
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 15),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      final response = await refreshDio.post(
         '/auth/refresh',
-        data: {'refreshToken': refreshToken},
+        options: Options(
+          headers: {'Authorization': 'Bearer $refreshToken'},
+        ),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {

@@ -85,12 +85,14 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>orientation.app</string>
+			<string>com.archnest.orientation</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>orientation</string>
 			</array>
 		</dict>
 	</array>
+	<key>FlutterDeepLinkingEnabled</key>
+	<false/>
 </dict>
 </plist>

@@ -22,7 +22,7 @@ class ClipService {
   /// Get paginated clips.
   Future<List<ClipModel>> getClips({
     int page = 1,
-    int limit = 20,
+    int limit = 10,
     bool forceRefresh = false,
   }) =>
       _clipApi.getAllClips(

@@ -35,7 +35,7 @@ class ClipApi {
   /// Get all clips with pagination support
   Future<List<ClipModel>> getAllClips({
     int page = 1,
-    int limit = 20,
+    int limit = 10,
   }) async {
     try {
       debugPrint('🌐 ClipApi: Fetching clips (page $page, limit $limit)');
@@ -574,10 +574,11 @@ class ClipsScreenState extends State<ClipsScreen> {
         return;
       }
       final clipService = getx.Get.find<ClipService>();
-      // Use limit 50 instead of 5 so newly added reels in the database are not cut off
+      // Reduced from 20 -> 10 to match ReelsScreenState._pageSize and avoid
+      // over-fetching metadata for reels beyond the video preload window.
       final clips = await clipService.getClips(
         page: 1,
-        limit: 50,
+        limit: 10,
         forceRefresh: forceRefresh,
       );
       debugPrint('🎬 [ClipsScreen] Received ${clips.length} clips from ClipService');

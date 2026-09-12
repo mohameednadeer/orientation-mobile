@@ -27,6 +27,8 @@ import '../widgets/app_toast.dart';
 import '../services/project_service.dart';
 import '../services/projects_service.dart';
 import '../services/subscription_service.dart';
+import '../widgets/whatsapp_icon.dart';
+import '../utils/share_helper.dart';
 
 class ProjectDetailsScreen extends StatefulWidget {
   final String? projectId;
@@ -66,6 +68,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
   String? _inventoryUrl; // from /files/get/inventory, not on project
   bool _isLoading = true;
   bool _isSaved = false;
+  bool _hasSavedStateChanged = false;
   bool _isScriptExpanded = false;
   VideoPlayerController? _adVideoController;
   bool _isVideoMuted = true; // Start muted by default
@@ -762,6 +765,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
         await _projectApi.unsaveProject(_project!.id);
         if (mounted) AppToast.showSave(context, isSaved: false);
       }
+      _hasSavedStateChanged = true;
     } catch (e) {
       // Revert on error
       setState(() {
@@ -1000,27 +1004,16 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
     final isAuth = await AuthHelper.requireAuth(context);
     if (!isAuth) return;
 
-    if (_project == null) {
+    final projId = _project?.id ?? widget.projectId;
+    if (projId == null || projId.isEmpty) {
       _showSnackBar('Nothing to share', isError: true);
       return;
     }
 
-    final shareText = '''
-🏠 ${_project!.title}
-📍 ${_project!.location.isNotEmpty ? _project!.location : _project!.area}
-🏗️ ${_project!.developerName}
-
-${_project!.script.isNotEmpty ? _project!.script : _project!.description}
-
-📞 WhatsApp: ${_project!.whatsappNumber}
-📍 Location: ${_project!.locationUrl}
-''';
-
-    try {
-      await Share.share(shareText, subject: _project!.title);
-    } catch (e) {
-      _showSnackBar('Error sharing', isError: true);
-    }
+    ShareHelper.shareProject(
+      projectId: projId,
+      title: _project?.title,
+    );
   }
 
   Future<void> _openInventory() async {
@@ -1165,22 +1158,27 @@ ${_project!.script.isNotEmpty ? _project!.script : _project!.description}
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const ProjectDetailsLoadingPlaceholder();
-    }
-
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Column(
-        children: [
-          // Hero section
-          _buildHeroSection(),
-          // Content section
-          Expanded(
-            child: _buildContentSection(),
-          ),
-        ],
-      ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (didPop) return;
+        Navigator.pop(context, _hasSavedStateChanged);
+      },
+      child: _isLoading
+          ? const ProjectDetailsLoadingPlaceholder()
+          : Scaffold(
+              backgroundColor: Colors.black,
+              body: Column(
+                children: [
+                  // Hero section
+                  _buildHeroSection(),
+                  // Content section
+                  Expanded(
+                    child: _buildContentSection(),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 
@@ -1335,7 +1333,7 @@ ${_project!.script.isNotEmpty ? _project!.script : _project!.description}
               top: 50,
               left: 16,
               child: GestureDetector(
-                onTap: () => Navigator.pop(context),
+                onTap: () => Navigator.pop(context, _hasSavedStateChanged),
                 child: Container(
                   width: 36,
                   height: 36,
@@ -1574,10 +1572,11 @@ ${_project!.script.isNotEmpty ? _project!.script : _project!.description}
                               width: 1,
                             ),
                           ),
-                          child: const Icon(
-                            Icons.chat_bubble_outline_rounded,
-                            color: Colors.white,
-                            size: 20,
+                          child: const Center(
+                            child: WhatsAppIcon(
+                              size: 20,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
@@ -1794,62 +1793,21 @@ ${_project!.script.isNotEmpty ? _project!.script : _project!.description}
                 width: 1,
               ),
             ),
-            child: TabBar(
-              controller: _tabController,
-              isScrollable: false,
-              indicator: BoxDecoration(
-                color: brandRed,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              indicatorSize: TabBarIndicatorSize.tab,
-              dividerColor: Colors.transparent,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white.withOpacity(0.5),
-              labelPadding: const EdgeInsets.symmetric(horizontal: 2),
-              labelStyle: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-              ),
-              unselectedLabelStyle: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w500,
-              ),
-              tabs: [
-                const Tab(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text('Project'),
-                  ),
-                ),
-                Tab(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      'Episodes (${_projectDetails?.episodes.length ?? 0})',
-                      maxLines: 1,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ),
-                const Tab(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text('Inventory'),
-                  ),
-                ),
-                const Tab(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text('Reels'),
-                  ),
-                ),
-                const Tab(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text('S.V'),
-                  ),
-                ),
-              ],
+            child: AnimatedBuilder(
+              animation: _tabController.animation ?? _tabController,
+              builder: (context, _) {
+                final activeIndex = (_tabController.animation?.value ?? _tabController.index).round();
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildCustomTabItem(0, 'Project', activeIndex == 0),
+                    _buildCustomTabItem(1, 'Episodes', activeIndex == 1),
+                    _buildCustomTabItem(2, 'Inventory', activeIndex == 2),
+                    _buildCustomTabItem(3, 'Reels', activeIndex == 3),
+                    _buildCustomTabItem(4, 'S.V', activeIndex == 4),
+                  ],
+                );
+              },
             ),
           ),
           const SizedBox(height: 6),
@@ -1868,6 +1826,44 @@ ${_project!.script.isNotEmpty ? _project!.script : _project!.description}
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCustomTabItem(int index, String title, bool isSelected) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        if (_tabController.index != index) {
+          _tabController.animateTo(index);
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: isSelected ? 12.5 : 11.5,
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+            letterSpacing: isSelected ? 0.3 : 0.0,
+            color: isSelected
+                ? const Color(0xFFFF2D3B)
+                : Colors.white.withOpacity(0.45),
+            shadows: isSelected
+                ? const [
+                    Shadow(
+                      color: Colors.black,
+                      offset: Offset(0, 2),
+                      blurRadius: 4,
+                    ),
+                    Shadow(
+                      color: Color(0x99E50914),
+                      blurRadius: 10,
+                    ),
+                  ]
+                : null,
+          ),
+        ),
       ),
     );
   }
@@ -2559,82 +2555,22 @@ class _EpisodeItem extends StatelessWidget {
               child: SizedBox(
                 width: 100,
                 height: 68,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    thumbnail.isNotEmpty
-                        ? (isAsset
-                            ? Image.asset(
-                                thumbnail,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
-                                    _buildPlaceholder(),
-                              )
-                            : CachedNetworkImage(
-                                imageUrl: thumbnail,
-                                fit: BoxFit.cover,
-                                placeholder: (_, __) => _buildPlaceholder(),
-                                errorWidget: (_, __, ___) =>
-                                    _buildPlaceholder(),
-                              ))
-                        : _buildPlaceholder(),
-                    // Top-left EP badge
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.75),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'EP $episodeNumber',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Bottom-left duration badge
-                    if (duration.isNotEmpty)
-                      Positioned(
-                        bottom: 6,
-                        left: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.75),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.access_time,
-                                color: Colors.white70,
-                                size: 9,
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                duration,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+                child: thumbnail.isNotEmpty
+                    ? (isAsset
+                        ? Image.asset(
+                            thumbnail,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                _buildPlaceholder(),
+                          )
+                        : CachedNetworkImage(
+                            imageUrl: thumbnail,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => _buildPlaceholder(),
+                            errorWidget: (_, __, ___) =>
+                                _buildPlaceholder(),
+                          ))
+                    : _buildPlaceholder(),
               ),
             ),
             const SizedBox(width: 12),
@@ -2711,14 +2647,10 @@ class _EpisodeItem extends StatelessWidget {
     return Container(
       color: const Color(0xFF1F1F1F),
       child: Center(
-        child: Text(
-          'EP $episodeNumber',
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.4),
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1,
-          ),
+        child: Icon(
+          Icons.play_circle_outline,
+          color: Colors.white.withOpacity(0.3),
+          size: 28,
         ),
       ),
     );
@@ -3089,8 +3021,7 @@ class ProjectDetailsUIDesign extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 _buildActionButton(
-                  icon: Icons.chat_bubble_outline_rounded,
-                  color: Colors.white,
+                  customIcon: const WhatsAppIcon(size: 20, color: Colors.white),
                   onTap: onWhatsAppTap,
                 ),
                 const SizedBox(width: 8),
@@ -3239,48 +3170,26 @@ class ProjectDetailsUIDesign extends StatelessWidget {
               borderRadius: BorderRadius.circular(24),
               border: Border.all(color: Colors.white.withOpacity(0.06), width: 1),
             ),
-            child: TabBar(
-              indicator: BoxDecoration(color: brandRed, borderRadius: BorderRadius.circular(20)),
-              indicatorSize: TabBarIndicatorSize.tab,
-              dividerColor: Colors.transparent,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white.withOpacity(0.5),
-              labelPadding: const EdgeInsets.symmetric(horizontal: 2),
-              labelStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
-              unselectedLabelStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500),
-              isScrollable: false,
-              tabs: const [
-                Tab(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text('Project'),
-                  ),
-                ),
-                Tab(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text('Episodes (1)', maxLines: 1),
-                  ),
-                ),
-                Tab(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text('Inventory'),
-                  ),
-                ),
-                Tab(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text('Reels'),
-                  ),
-                ),
-                Tab(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text('S.V'),
-                  ),
-                ),
-              ],
+            child: Builder(
+              builder: (context) {
+                final tabController = DefaultTabController.of(context);
+                return AnimatedBuilder(
+                  animation: tabController.animation ?? tabController,
+                  builder: (context, _) {
+                    final activeIndex = (tabController.animation?.value ?? tabController.index).round();
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildDummyBarItem(tabController, 0, 'Project', activeIndex == 0),
+                        _buildDummyBarItem(tabController, 1, 'Episodes', activeIndex == 1),
+                        _buildDummyBarItem(tabController, 2, 'Inventory', activeIndex == 2),
+                        _buildDummyBarItem(tabController, 3, 'Reels', activeIndex == 3),
+                        _buildDummyBarItem(tabController, 4, 'S.V', activeIndex == 4),
+                      ],
+                    );
+                  },
+                );
+              },
             ),
           ),
           const SizedBox(height: 6),
@@ -3302,7 +3211,50 @@ class ProjectDetailsUIDesign extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButton({required IconData icon, required Color color, required VoidCallback onTap}) {
+  Widget _buildDummyBarItem(TabController tabController, int index, String title, bool isSelected) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        if (tabController.index != index) {
+          tabController.animateTo(index);
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: isSelected ? 12.5 : 11.5,
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+            letterSpacing: isSelected ? 0.3 : 0.0,
+            color: isSelected
+                ? const Color(0xFFFF2D3B)
+                : Colors.white.withOpacity(0.45),
+            shadows: isSelected
+                ? const [
+                    Shadow(
+                      color: Colors.black,
+                      offset: Offset(0, 2),
+                      blurRadius: 4,
+                    ),
+                    Shadow(
+                      color: Color(0x99E50914),
+                      blurRadius: 10,
+                    ),
+                  ]
+                : null,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    IconData? icon,
+    Widget? customIcon,
+    Color color = Colors.white,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -3313,7 +3265,9 @@ class ProjectDetailsUIDesign extends StatelessWidget {
           color: const Color(0xFF141414),
           border: Border.all(color: Colors.white.withOpacity(0.08), width: 1),
         ),
-        child: Icon(icon, color: color, size: 20),
+        child: Center(
+          child: customIcon ?? Icon(icon, color: color, size: 20),
+        ),
       ),
     );
   }
@@ -3490,34 +3444,12 @@ class EpisodeItemDesign extends StatelessWidget {
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(colors: [Color(0xFF2A2A2A), Color(0xFF1A1A1A)]),
                 ),
-                child: Stack(
-                  children: [
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.black.withOpacity(0.75), borderRadius: BorderRadius.circular(4)),
-                        child: Text('EP $episodeNumber', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 6,
-                      left: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.black.withOpacity(0.75), borderRadius: BorderRadius.circular(4)),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.access_time, color: Colors.white70, size: 9),
-                            const SizedBox(width: 3),
-                            Text(duration, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                child: Center(
+                  child: Icon(
+                    Icons.play_circle_outline,
+                    color: Colors.white.withOpacity(0.3),
+                    size: 28,
+                  ),
                 ),
               ),
             ),

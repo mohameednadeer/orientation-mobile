@@ -50,21 +50,19 @@ class CacheService {
   /// in the background without blocking the UI.
   Future<void> cacheReelsContent(List<ClipModel> items) async {
     if (items.isEmpty) return;
-    debugPrint('🎬 CacheService: Pre-caching thumbnails and initial videos for ${items.length} reels...');
+    debugPrint('🎬 CacheService: Pre-caching thumbnails for ${items.length} reels...');
 
-    // 1. Pre-cache thumbnails for first 15 reels (instant poster presentation)
+    // Pre-cache thumbnails for first 15 reels (instant poster presentation)
     for (final item in items.take(15)) {
       if (item.thumbnail.isNotEmpty && _isValidUrl(item.thumbnail)) {
         _cacheFile(item.thumbnail, CacheManagerReels.instance, 'Reel thumbnail');
       }
     }
 
-    // 2. Pre-cache first 3 video files in background for instant opening
-    for (final item in items.take(3)) {
-      if (item.videoUrl.isNotEmpty && _isValidUrl(item.videoUrl) && !item.isAsset) {
-        _cacheFile(item.videoUrl, CacheManagerReels.instance, 'Reel video');
-      }
-    }
+    // Video pre-download loop REMOVED. VideoControllerManager.onPageChanged()
+    // already initializes index 0 (plays immediately) and preloads index 1
+    // (muted, paused) via the same CacheManagerReels instance. Duplicating
+    // that here caused two independent fetches of the same video URL.
   }
 
   /// Cache ONLY the hero media (image or video) for a specific project

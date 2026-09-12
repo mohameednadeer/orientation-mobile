@@ -166,6 +166,7 @@ class _OrientationAppState extends State<OrientationApp>
     return GetMaterialApp(
       title: 'Orientation',
       debugShowCheckedModeBanner: false,
+      navigatorKey: DeepLinkService.navigatorKey,
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: Colors.black,

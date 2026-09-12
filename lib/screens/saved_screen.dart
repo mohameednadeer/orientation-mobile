@@ -76,23 +76,14 @@ class _SavedScreenState extends State<SavedScreen>
     });
 
     try {
-      // 1. Get saved reels
+      // Use exactly what the backend returns. Do NOT call getClipById
+      // per-reel — full reel detail is only fetched on tap,
+      // not while rendering the list.
       final savedReels = await _clipService.getSavedReels();
-
-      // 2. Hydrate only reels with missing thumbnails
-      final hydratedReels = await Future.wait(
-        savedReels.map((saved) async {
-          if (saved.thumbnail.isEmpty) {
-            final full = await _clipService.getClipById(saved.id);
-            return full ?? saved;
-          }
-          return saved;
-        }),
-      );
 
       if (mounted) {
         setState(() {
-          _savedReels = hydratedReels;
+          _savedReels = savedReels;
           _isLoadingReels = false;
         });
       }
@@ -506,11 +497,11 @@ class _SavedScreenState extends State<SavedScreen>
                     projectId: project.id,
                   ),
                 ),
-              ).then((_) {
-                if (mounted) {
+              ).then((changed) {
+                if (mounted && changed == true) {
                   _refreshAll();
                 }
-              }); // Refresh on return
+              });
             },
             onRemove: () => _removeFromSaved(project),
           );
@@ -540,18 +531,43 @@ class _SavedScreenState extends State<SavedScreen>
               final isAuth = await AuthHelper.requireAuth(context);
               if (!isAuth) return;
 
+              debugPrint(
+                  '🎬 [SavedScreen] Opening reel: id="${reel.id}", title="${reel.title}", videoUrl="${reel.videoUrl}"');
+
+              if (reel.id.isEmpty) {
+                debugPrint('⚠️ [SavedScreen] Cannot open reel with empty id');
+                return;
+              }
+
+              // Fetch full reel detail on demand via GET /reels/:id.
+              // If reel.videoUrl is empty, forceRefresh: true guarantees GET /reels/:id is sent over the network.
+              ClipModel fullReel = reel;
+              try {
+                final fetched = await _clipService.getClipById(
+                  reel.id,
+                  forceRefresh: reel.videoUrl.isEmpty,
+                );
+                if (fetched != null) {
+                  fullReel = fetched;
+                }
+              } catch (e) {
+                debugPrint('⚠️ [SavedScreen] Error fetching full reel: $e');
+              }
+
               if (!context.mounted) return;
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => ReelsScreen(
-                    clips: _savedReels,
-                    initialIndex: index,
+                    clips: [fullReel], // pass only the resolved reel(s) actually needed
+                    initialIndex: 0,
                     initialVisible: true,
+                    isSavedOnlyContext: true,
+                    initialSavedIds: _savedReels.map((r) => r.id).toSet(),
                   ),
                 ),
-              ).then((_) {
-                if (mounted) {
+              ).then((changed) {
+                if (mounted && changed == true) {
                   _refreshAll();
                 }
               });
@@ -893,33 +909,36 @@ class _SavedReelItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF14141A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.4),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF14141A),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.08),
+            width: 1,
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            splashColor: brandRed.withValues(alpha: 0.1),
-            highlightColor: Colors.white.withValues(alpha: 0.04),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              splashColor: brandRed.withValues(alpha: 0.1),
+              highlightColor: Colors.white.withValues(alpha: 0.04),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
                 // Thumbnail
                 _buildThumbnail(),
 
@@ -982,6 +1001,7 @@ class _SavedReelItem extends StatelessWidget {
                   top: 8,
                   right: 8,
                   child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: onRemove,
                     child: Container(
                       width: 32,
@@ -1081,8 +1101,9 @@ class _SavedReelItem extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildThumbnail() {
     if (reel.thumbnail.isEmpty) {

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
-import '../widgets/auth_header.dart';
 import '../widgets/orientation_logo.dart';
 import '../services/api/auth_api.dart';
 import 'login_screen.dart';
+import 'courses_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -320,17 +320,28 @@ class AppDrawerState extends State<AppDrawer> {
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
-                children: const [
-                  DrawerMenuItem(title: 'The latest for us'),
-                  DrawerMenuItem(title: 'Continue watching'),
-                  DrawerMenuItem(title: 'Top 10'),
-                  DrawerMenuItem(title: 'Projects in Northcoast'),
-                  DrawerMenuItem(title: 'Projects in New Cairo'),
-                  DrawerMenuItem(title: 'Projects in October'),
-                  DrawerMenuItem(title: 'Upcoming events'),
-                  DrawerMenuItem(title: 'Courses'),
-                  DrawerMenuItem(title: 'Developers'),
-                  DrawerMenuItem(title: 'Areas'),
+                children: [
+                  const DrawerMenuItem(title: 'The latest for us'),
+                  const DrawerMenuItem(title: 'Continue watching'),
+                  const DrawerMenuItem(title: 'Top 10'),
+                  const DrawerMenuItem(title: 'Projects in Northcoast'),
+                  const DrawerMenuItem(title: 'Projects in New Cairo'),
+                  const DrawerMenuItem(title: 'Projects in October'),
+                  const DrawerMenuItem(title: 'Upcoming events'),
+                  DrawerMenuItem(
+                    title: 'Courses',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CoursesScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const DrawerMenuItem(title: 'Developers'),
+                  const DrawerMenuItem(title: 'Areas'),
                 ],
               ),
             ),

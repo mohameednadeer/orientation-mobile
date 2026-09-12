@@ -5,11 +5,10 @@ import '../services/api/project_api.dart';
 import '../services/api/home_api.dart';
 import '../models/project_model.dart';
 import '../models/episode_model.dart';
-import '../utils/auth_helper.dart';
 import 'episode_player_screen.dart';
 import 'project_details_screen.dart';
-import 'package:share_plus/share_plus.dart';
 import '../widgets/app_toast.dart';
+import '../utils/share_helper.dart';
 
 class ProjectsListScreen extends StatefulWidget {
   final String title;
@@ -187,28 +186,7 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
   }
 
   Future<void> _handleShare(ProjectModel project) async {
-    final shareText = '''
-🏗️ ${project.title}
-📍 ${project.location}
-👷 ${project.developerName}
-
-${project.script ?? 'Check out this amazing project!'}
-
-شاهد المزيد على تطبيق Orientation!
-''';
-
-    try {
-      await Share.share(shareText, subject: project.title);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error sharing'),
-            backgroundColor: brandRed,
-          ),
-        );
-      }
-    }
+    ShareHelper.shareProject(projectId: project.id, title: project.title);
   }
 
   @override

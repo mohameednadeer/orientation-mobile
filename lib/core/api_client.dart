@@ -166,10 +166,12 @@ class ApiClient {
         ),
       );
 
-      debugPrint('🔄 [checkAuthStatus] Attempting POST /auth/refresh...');
+      debugPrint('🔄 [checkAuthStatus] Attempting POST /auth/refresh with Bearer refresh token...');
       final response = await cleanDio.post(
         '/auth/refresh',
-        data: {'refreshToken': refreshToken},
+        options: Options(
+          headers: {'Authorization': 'Bearer $refreshToken'},
+        ),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {

@@ -749,34 +749,44 @@ class ProjectApi {
         return false;
       }
 
-      final response = await _dioClient.dio.post('/reels/$reelId/save').timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw TimeoutException('Save reel request timeout');
-        },
-      );
-
-      final success = response.statusCode == 200 || response.statusCode == 201;
-
-      // Update cache on success
-      if (success && _savedReelIdsCache != null) {
-        _savedReelIdsCache!.add(reelId);
+      // 1. Always persist to local SharedPreferences immediately
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final ids = (prefs.getStringList('saved_reels') ?? []).toSet();
+        ids.add(reelId);
+        await prefs.setStringList('saved_reels', ids.toList());
+      } catch (e) {
+        print('⚠️ Error updating local saved_reels: $e');
       }
 
-      return success;
-    } on TimeoutException catch (e) {
-      print('⚠️ Timeout saving reel: $e');
-      return false;
-    } on DioException catch (e) {
-      print('⚠️ Error saving reel: ${e.message}');
-      if (e.response != null) {
-        print('   Status: ${e.response?.statusCode}');
-        print('   Data: ${e.response?.data}');
-      }
-      return false;
+      _savedReelIdsCache ??= {};
+      _savedReelIdsCache!.add(reelId);
+
+      // 2. Call backend with fallback methods
+      try {
+        await _dioClient.dio.post('/reels/$reelId/save').timeout(
+          const Duration(seconds: 6),
+        );
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 404 || e.response?.statusCode == 405) {
+          try {
+            await _dioClient.dio.patch('/reels/$reelId/save-reel').timeout(
+              const Duration(seconds: 6),
+            );
+          } catch (_) {
+            try {
+              await _dioClient.dio.patch('/reels/$reelId/save').timeout(
+                const Duration(seconds: 6),
+              );
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+
+      return true;
     } catch (e) {
-      print('⚠️ Unexpected error saving reel: $e');
-      return false;
+      print('⚠️ Error in saveReel: $e');
+      return true; // Keep local save successful
     }
   }
 
@@ -788,35 +798,45 @@ class ProjectApi {
         return false;
       }
 
-      final response =
-          await _dioClient.dio.post('/reels/$reelId/unsave').timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw TimeoutException('Unsave reel request timeout');
-        },
-      );
+      // 1. Always update local SharedPreferences immediately
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final ids = (prefs.getStringList('saved_reels') ?? []).toSet();
+        ids.remove(reelId);
+        await prefs.setStringList('saved_reels', ids.toList());
+      } catch (e) {
+        print('⚠️ Error updating local saved_reels: $e');
+      }
 
-      final success = response.statusCode == 200 || response.statusCode == 201;
-
-      // Update cache on success
-      if (success && _savedReelIdsCache != null) {
+      if (_savedReelIdsCache != null) {
         _savedReelIdsCache!.remove(reelId);
       }
 
-      return success;
-    } on TimeoutException catch (e) {
-      print('⚠️ Timeout unsaving reel: $e');
-      return false;
-    } on DioException catch (e) {
-      print('⚠️ Error unsaving reel: ${e.message}');
-      if (e.response != null) {
-        print('   Status: ${e.response?.statusCode}');
-        print('   Data: ${e.response?.data}');
-      }
-      return false;
+      // 2. Call backend with fallback methods
+      try {
+        await _dioClient.dio.post('/reels/$reelId/unsave').timeout(
+          const Duration(seconds: 6),
+        );
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 404 || e.response?.statusCode == 405) {
+          try {
+            await _dioClient.dio.patch('/reels/$reelId/unsave-reel').timeout(
+              const Duration(seconds: 6),
+            );
+          } catch (_) {
+            try {
+              await _dioClient.dio.patch('/reels/$reelId/unsave').timeout(
+                const Duration(seconds: 6),
+              );
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+
+      return true;
     } catch (e) {
-      print('⚠️ Unexpected error unsaving reel: $e');
-      return false;
+      print('⚠️ Error in unsaveReel: $e');
+      return true; // Keep local unsave successful
     }
   }
 
@@ -860,9 +880,11 @@ class ProjectApi {
           final data = response.data;
 
           List<dynamic>? reelsList;
-          if (data is Map<String, dynamic>) {
-            // Handle { message, savedReels: [...] } format
-            reelsList = data['savedReels'] as List<dynamic>?;
+          if (data is Map) {
+            // Handle { message, savedReels: [...] } or { reels: [...] } or { data: [...] } format
+            reelsList = (data['savedReels'] as List<dynamic>?) ??
+                (data['reels'] as List<dynamic>?) ??
+                (data['data'] as List<dynamic>?);
           } else if (data is List) {
             // Handle direct array format
             reelsList = data;
@@ -872,13 +894,19 @@ class ProjectApi {
             final reels = reelsList
                 .map((e) {
                   try {
-                    return ClipModel.fromJson(e as Map<String, dynamic>);
+                    if (e is Map) {
+                      return ClipModel.fromJson(Map<String, dynamic>.from(e));
+                    } else if (e is String && e.trim().isNotEmpty) {
+                      return ClipModel(id: e.trim(), projectId: '');
+                    }
+                    return null;
                   } catch (e) {
                     print('⚠️ Error parsing saved reel: $e');
                     return null;
                   }
                 })
                 .whereType<ClipModel>()
+                .where((r) => r.id.isNotEmpty)
                 .toList();
 
             // Update cache
@@ -903,9 +931,12 @@ class ProjectApi {
           if (data is List) {
             // Handle direct array format
             reelsList = data;
-          } else if (data is Map<String, dynamic>) {
+          } else if (data is Map) {
             // Handle { message, reels: [...] } format
-            reelsList = data['reels'] as List<dynamic>? ?? <dynamic>[];
+            reelsList = (data['reels'] as List<dynamic>?) ??
+                (data['savedReels'] as List<dynamic>?) ??
+                (data['data'] as List<dynamic>?) ??
+                <dynamic>[];
           } else {
             reelsList = <dynamic>[];
           }
@@ -913,13 +944,19 @@ class ProjectApi {
           final reels = reelsList
               .map((e) {
                 try {
-                  return ClipModel.fromJson(e as Map<String, dynamic>);
+                  if (e is Map) {
+                    return ClipModel.fromJson(Map<String, dynamic>.from(e));
+                  } else if (e is String && e.trim().isNotEmpty) {
+                    return ClipModel(id: e.trim(), projectId: '');
+                  }
+                  return null;
                 } catch (e) {
                   print('⚠️ Error parsing saved reel: $e');
                   return null;
                 }
               })
               .whereType<ClipModel>()
+              .where((r) => r.id.isNotEmpty)
               .toList();
 
           // Update cache

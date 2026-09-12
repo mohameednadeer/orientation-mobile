@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../widgets/orientation_logo.dart';
-import '../widgets/auth_header.dart';
 import '../utils/auth_helper.dart';
 import '../services/api/auth_api.dart';
 import '../screens/login_screen.dart';
@@ -11,11 +10,17 @@ import '../screens/top_10_screen.dart';
 import '../screens/projects_list_screen.dart';
 import '../screens/developers_screen.dart';
 import '../screens/areas_screen.dart';
+import '../screens/courses_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   final VoidCallback? onScrollToUpcoming;
+  final VoidCallback? onNavigateToCourses;
   
-  const AppDrawer({super.key, this.onScrollToUpcoming});
+  const AppDrawer({
+    super.key,
+    this.onScrollToUpcoming,
+    this.onNavigateToCourses,
+  });
 
   @override
   AppDrawerState createState() => AppDrawerState();
@@ -286,9 +291,18 @@ class AppDrawerState extends State<AppDrawer> {
                   ),
                   DrawerMenuItem(
                     title: 'Courses',
-                    onTap: () async {
+                    onTap: () {
                       Navigator.pop(context);
-                      await AuthHelper.requireAuth(context);
+                      if (widget.onNavigateToCourses != null) {
+                        widget.onNavigateToCourses!();
+                      } else {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const CoursesScreen(),
+                          ),
+                        );
+                      }
                     },
                   ),
                   DrawerMenuItem(

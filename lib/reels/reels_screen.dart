@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../widgets/app_toast.dart';
+import '../services/api/improved_clip_api.dart';
+import '../services/api/project_api.dart';
 import '../models/clip_model.dart';
 import '../models/project_model.dart';
 import '../services/clip_service.dart';
@@ -19,6 +23,8 @@ class ReelsScreen extends StatefulWidget {
   final int initialIndex;
   final bool initialVisible;
   final VoidCallback? onBack;
+  final bool isSavedOnlyContext;
+  final Set<String>? initialSavedIds;
 
   const ReelsScreen({
     super.key,
@@ -26,6 +32,8 @@ class ReelsScreen extends StatefulWidget {
     this.initialIndex = 0,
     this.initialVisible = true,
     this.onBack,
+    this.isSavedOnlyContext = false,
+    this.initialSavedIds,
   });
 
   @override
@@ -42,11 +50,11 @@ class ReelsScreenState extends State<ReelsScreen>
   late List<ClipModel> _clips;
   int _currentIndex = 0;
   int _currentPage = 1;
-  static const int _pageSize = 20;
+  static const int _pageSize = 10;
   bool _isLoadingMore = false;
   bool _hasMore = true;
 
-  final Map<String, bool> _savedReelIds = {};
+  bool _hasSavedStateChanged = false;
 
   static const Color brandRed = Color(0xFFE50914);
 
@@ -60,14 +68,27 @@ class ReelsScreenState extends State<ReelsScreen>
     _pageController = PageController(initialPage: widget.initialIndex);
     _currentIndex = widget.initialIndex;
 
+    if (widget.isSavedOnlyContext) {
+      _hasMore = false;
+    }
+
     try {
       if (Get.isRegistered<ClipService>()) {
         _clipService = Get.find<ClipService>();
       }
     } catch (_) {}
+    _clipService ??= ClipService(
+      clipApi: Get.isRegistered<ImprovedClipApi>()
+          ? Get.find<ImprovedClipApi>()
+          : ImprovedClipApi(),
+      projectApi: Get.isRegistered<ProjectApi>()
+          ? Get.find<ProjectApi>()
+          : ProjectApi(),
+    );
 
     WidgetsBinding.instance.addObserver(this);
-    _loadSavedStatus();
+
+    _syncSavedReelsFromPrefs();
 
     // Trigger initial page playback & pre-buffering
     if (_clips.isNotEmpty) {
@@ -77,14 +98,48 @@ class ReelsScreenState extends State<ReelsScreen>
     }
   }
 
+  Future<void> _syncSavedReelsFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedIds = (prefs.getStringList('saved_reels') ?? []).toSet();
+      if (widget.initialSavedIds != null) {
+        savedIds.addAll(widget.initialSavedIds!);
+      }
+      if (savedIds.isNotEmpty && mounted) {
+        setState(() {
+          _clips = _clips
+              .map((c) => savedIds.contains(c.id) ? c.copyWith(isSaved: true) : c)
+              .toList();
+        });
+      }
+    } catch (_) {}
+  }
+
   Future<void> _loadInitialClips() async {
-    if (_clipService == null) return;
+    _clipService ??= ClipService(
+      clipApi: Get.isRegistered<ImprovedClipApi>()
+          ? Get.find<ImprovedClipApi>()
+          : ImprovedClipApi(),
+      projectApi: Get.isRegistered<ProjectApi>()
+          ? Get.find<ProjectApi>()
+          : ProjectApi(),
+    );
     try {
       final initial = await _clipService!.getClips(page: 1, limit: _pageSize);
       if (!mounted) return;
       if (initial.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final savedIds = (prefs.getStringList('saved_reels') ?? []).toSet();
+        if (widget.initialSavedIds != null) {
+          savedIds.addAll(widget.initialSavedIds!);
+        }
+
+        final mapped = initial
+            .map((c) => savedIds.contains(c.id) ? c.copyWith(isSaved: true) : c)
+            .toList();
+
         setState(() {
-          _clips = initial;
+          _clips = mapped;
           _currentPage = 1;
           _hasMore = initial.length >= _pageSize;
         });
@@ -112,9 +167,15 @@ class ReelsScreenState extends State<ReelsScreen>
       _videoManager.setVisible(widget.initialVisible);
     }
     if (oldWidget.clips != widget.clips) {
-      _loadSavedStatus();
       if (widget.clips.isNotEmpty) {
         _clips = List<ClipModel>.from(widget.clips);
+      }
+      if (widget.initialSavedIds != null) {
+        _clips = _clips
+            .map((c) => widget.initialSavedIds!.contains(c.id)
+                ? c.copyWith(isSaved: true)
+                : c)
+            .toList();
       }
       if (_currentIndex >= _clips.length) {
         _currentIndex = (_clips.length - 1).clamp(0, double.infinity).toInt();
@@ -146,20 +207,6 @@ class ReelsScreenState extends State<ReelsScreen>
     }
   }
 
-  Future<void> _loadSavedStatus() async {
-    if (!mounted || _clipService == null) return;
-    try {
-      final saved = await _clipService!.getSavedReels();
-      if (mounted) {
-        setState(() {
-          _savedReelIds.clear();
-          for (final r in saved) {
-            _savedReelIds[r.id] = true;
-          }
-        });
-      }
-    } catch (_) {}
-  }
 
   void _onPageChanged(int index) {
     if (index < 0 || index >= _clips.length) return;
@@ -170,13 +217,13 @@ class ReelsScreenState extends State<ReelsScreen>
     _videoManager.onPageChanged(index, _clips);
 
     // Infinite Pagination: When user is within 3 reels of the end, load next page
-    if (index >= _clips.length - 3 && !_isLoadingMore && _hasMore) {
+    if (!widget.isSavedOnlyContext && index >= _clips.length - 3 && !_isLoadingMore && _hasMore) {
       _loadMoreClips();
     }
   }
 
   Future<void> _loadMoreClips() async {
-    if (_isLoadingMore || !_hasMore || _clipService == null) return;
+    if (widget.isSavedOnlyContext || _isLoadingMore || !_hasMore || _clipService == null) return;
     _isLoadingMore = true;
 
     try {
@@ -201,10 +248,16 @@ class ReelsScreenState extends State<ReelsScreen>
         if (uniqueNew.isEmpty) {
           _hasMore = false;
         } else {
+          final prefs = await SharedPreferences.getInstance();
+          final savedIds = (prefs.getStringList('saved_reels') ?? []).toSet();
+          final mappedNew = uniqueNew
+              .map((c) => savedIds.contains(c.id) ? c.copyWith(isSaved: true) : c)
+              .toList();
+
           _currentPage = nextPage;
-          _clips.addAll(uniqueNew);
+          _clips.addAll(mappedNew);
           debugPrint(
-              '🎬 [ReelsScreen] Appended ${uniqueNew.length} clips. Total: ${_clips.length}');
+              '🎬 [ReelsScreen] Appended ${mappedNew.length} clips. Total: ${_clips.length}');
           setState(() {});
         }
       }
@@ -238,7 +291,6 @@ class ReelsScreenState extends State<ReelsScreen>
         if (_pageController.hasClients) {
           _pageController.jumpToPage(0);
         }
-        _loadSavedStatus();
         _videoManager.onPageChanged(0, _clips);
       }
     } catch (e) {
@@ -263,52 +315,52 @@ class ReelsScreenState extends State<ReelsScreen>
   }
 
   Future<void> _toggleSave(int index) async {
-    debugPrint('💾 _toggleSave called for index: $index');
-    if (!mounted || _clipService == null) {
-      debugPrint('❌ Widget not mounted or clipService is null');
-      return;
-    }
-    if (index < 0 || index >= _clips.length) {
-      debugPrint('❌ Invalid index: $index');
-      return;
-    }
+    if (!mounted) return;
+    if (index < 0 || index >= _clips.length) return;
 
-    debugPrint('🔐 Checking authentication...');
-    final ok = await AuthHelper.requireAuth(context);
-    debugPrint('🔐 Auth result: $ok');
-    if (!ok || !mounted) {
-      debugPrint('❌ Auth failed or widget not mounted');
-      return;
-    }
+    _clipService ??= ClipService(
+      clipApi: Get.isRegistered<ImprovedClipApi>()
+          ? Get.find<ImprovedClipApi>()
+          : ImprovedClipApi(),
+      projectApi: Get.isRegistered<ProjectApi>()
+          ? Get.find<ProjectApi>()
+          : ProjectApi(),
+    );
 
     final clip = _clips[index];
-    final saved = _savedReelIds[clip.id] ?? false;
-    debugPrint('💾 Current saved status: $saved for clip: ${clip.id}');
+    final wasSaved = clip.isSaved;
+    final newSaved = !wasSaved;
 
-    // Optimistic UI update
-    _savedReelIds[clip.id] = !saved;
-    if (mounted) setState(() {});
+    // 1. Instant UI update
+    setState(() {
+      _clips[index] = clip.copyWith(isSaved: newSaved);
+    });
+    _hasSavedStateChanged = true;
 
+    // 2. Show Toast feedback
+    AppToast.showSave(context, isSaved: newSaved);
+
+    // 3. Persist to local storage immediately
     try {
-      bool success = false;
-      if (saved) {
-        debugPrint('🗑️ Unsaving reel...');
-        success = await _clipService!.unsaveReel(clip.id);
+      final prefs = await SharedPreferences.getInstance();
+      final savedIds = (prefs.getStringList('saved_reels') ?? []).toSet();
+      if (newSaved) {
+        savedIds.add(clip.id);
       } else {
-        debugPrint('💾 Saving reel...');
-        success = await _clipService!.saveReel(clip.id);
+        savedIds.remove(clip.id);
       }
+      await prefs.setStringList('saved_reels', savedIds.toList());
+    } catch (_) {}
 
-      if (!success) {
-        // Revert on API failure
-        _savedReelIds[clip.id] = saved;
-        if (mounted) setState(() {});
-        debugPrint('⚠️ Save/unsave API returned false — reverted local state');
+    // 4. Sync with backend service in background
+    try {
+      if (newSaved) {
+        await _clipService!.saveReel(clip.id);
+      } else {
+        await _clipService!.unsaveReel(clip.id);
       }
     } catch (e) {
-      debugPrint('❌ Error in _toggleSave: $e');
-      _savedReelIds[clip.id] = saved;
-      if (mounted) setState(() {});
+      debugPrint('⚠️ Error syncing reel save state: $e');
     }
   }
 
@@ -438,7 +490,7 @@ class ReelsScreenState extends State<ReelsScreen>
         if (widget.onBack != null) {
           widget.onBack!();
         } else if (Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
+          Navigator.of(context).pop(_hasSavedStateChanged);
         }
       },
       child: Scaffold(
@@ -461,7 +513,7 @@ class ReelsScreenState extends State<ReelsScreen>
                 index: index,
                 isActive: index == _currentIndex,
                 videoManager: _videoManager,
-                isSaved: _savedReelIds[clip.id] ?? false,
+                isSaved: clip.isSaved,
                 onTap: () => _onVideoTap(index),
                 onSaveTap: () => _toggleSave(index),
                 onProjectTap: () {
@@ -478,7 +530,7 @@ class ReelsScreenState extends State<ReelsScreen>
                   if (widget.onBack != null) {
                     widget.onBack!();
                   } else if (Navigator.of(context).canPop()) {
-                    Navigator.of(context).pop();
+                    Navigator.of(context).pop(_hasSavedStateChanged);
                   } else {
                     Navigator.pushAndRemoveUntil(
                       context,
@@ -824,12 +876,13 @@ class _ReelPageState extends State<_ReelPage>
                     onTap: widget.onSaveTap,
                     isSaved: widget.isSaved,
                   ),
-                  const SizedBox(height: 18),
-                  _DesignActionButton(
-                    icon: Icons.share_rounded,
-                    label: 'Share',
-                    onTap: widget.onShareTap,
-                  ),
+                  // Temporarily hidden share button
+                  // const SizedBox(height: 18),
+                  // _DesignActionButton(
+                  //   icon: Icons.share_rounded,
+                  //   label: 'Share',
+                  //   onTap: widget.onShareTap,
+                  // ),
                 ],
               ),
             ),

@@ -12,6 +12,7 @@ class ClipModel {
   final String projectLogo;
   final int likes;
   final bool isLiked;
+  final bool isSaved;
   final bool hasWhatsApp;
   final bool? locked;
   final DateTime? createdAt;
@@ -30,17 +31,34 @@ class ClipModel {
     this.projectLogo = '',
     this.likes = 0,
     this.isLiked = false,
+    this.isSaved = false,
     this.hasWhatsApp = true,
     this.locked,
     this.createdAt,
   });
 
   factory ClipModel.fromJson(Map<String, dynamic> json) {
+    // If wrapped under 'reel', 'clip', or 'data', unwrap first
+    Map<String, dynamic> source = json;
+    if (json['reel'] is Map) {
+      source = Map<String, dynamic>.from(json['reel'] as Map);
+    } else if (json['clip'] is Map) {
+      source = Map<String, dynamic>.from(json['clip'] as Map);
+    } else if (json['data'] is Map &&
+        (json['data']['_id'] != null ||
+            json['data']['id'] != null ||
+            json['data']['videoUrl'] != null)) {
+      source = Map<String, dynamic>.from(json['data'] as Map);
+    }
+
     String projectId = '';
     String projectName = '';
     String projectLogo = '';
 
-    final rawProj = json['projectId'] ?? json['project'];
+    final rawProj = source['projectId'] ??
+        source['project'] ??
+        json['projectId'] ??
+        json['project'];
     if (rawProj != null) {
       if (rawProj is Map) {
         final projMap = Map<String, dynamic>.from(rawProj);
@@ -65,12 +83,18 @@ class ClipModel {
 
     // Top-level fallbacks if provided in json directly
     if (projectName.isEmpty) {
-      projectName = json['projectName']?.toString() ??
+      projectName = source['projectName']?.toString() ??
+          source['projectTitle']?.toString() ??
+          json['projectName']?.toString() ??
           json['projectTitle']?.toString() ??
           '';
     }
     if (projectLogo.isEmpty) {
-      projectLogo = json['projectLogo']?.toString() ??
+      projectLogo = source['projectLogo']?.toString() ??
+          source['projectLogoUrl']?.toString() ??
+          source['logo']?.toString() ??
+          source['logoUrl']?.toString() ??
+          json['projectLogo']?.toString() ??
           json['projectLogoUrl']?.toString() ??
           json['logo']?.toString() ??
           json['logoUrl']?.toString() ??
@@ -78,9 +102,16 @@ class ClipModel {
     }
 
     // developerName/developerLogo from populated developerId or developer object
-    String developerName = json['developerName']?.toString() ?? '';
-    String developerLogo = json['developerLogo']?.toString() ?? '';
-    final dev = json['developerId'] ?? json['developer'];
+    String developerName = source['developerName']?.toString() ??
+        json['developerName']?.toString() ??
+        '';
+    String developerLogo = source['developerLogo']?.toString() ??
+        json['developerLogo']?.toString() ??
+        '';
+    final dev = source['developerId'] ??
+        source['developer'] ??
+        json['developerId'] ??
+        json['developer'];
     if (dev is Map) {
       final devMap = Map<String, dynamic>.from(dev);
       if (developerName.isEmpty) {
@@ -102,14 +133,24 @@ class ClipModel {
       projectLogo = developerLogo;
     }
 
-    final videoUrl = json['videoUrl']?.toString() ??
+    final videoUrl = source['videoUrl']?.toString() ??
+        source['url']?.toString() ??
+        source['video']?.toString() ??
+        source['reelUrl']?.toString() ??
+        source['video_url']?.toString() ??
+        json['videoUrl']?.toString() ??
         json['url']?.toString() ??
         json['video']?.toString() ??
         json['reelUrl']?.toString() ??
         json['video_url']?.toString() ??
         '';
 
-    final thumbnail = json['thumbnail']?.toString() ??
+    final thumbnail = source['thumbnail']?.toString() ??
+        source['thumbnailUrl']?.toString() ??
+        source['reelThumbnailUrl']?.toString() ??
+        source['coverUrl']?.toString() ??
+        source['poster']?.toString() ??
+        json['thumbnail']?.toString() ??
         json['thumbnailUrl']?.toString() ??
         json['reelThumbnailUrl']?.toString() ??
         json['coverUrl']?.toString() ??
@@ -117,32 +158,45 @@ class ClipModel {
         '';
 
     int likes = 0;
-    if (json['likes'] != null) {
-      likes = int.tryParse(json['likes'].toString()) ?? 0;
-    } else if (json['viewCount'] != null) {
-      likes = int.tryParse(json['viewCount'].toString()) ?? 0;
-    } else if (json['saveCount'] != null) {
-      likes = int.tryParse(json['saveCount'].toString()) ?? 0;
+    final likesRaw = source['likes'] ?? json['likes'];
+    final viewCountRaw = source['viewCount'] ?? json['viewCount'];
+    final saveCountRaw = source['saveCount'] ?? json['saveCount'];
+    if (likesRaw != null) {
+      likes = int.tryParse(likesRaw.toString()) ?? 0;
+    } else if (viewCountRaw != null) {
+      likes = int.tryParse(viewCountRaw.toString()) ?? 0;
+    } else if (saveCountRaw != null) {
+      likes = int.tryParse(saveCountRaw.toString()) ?? 0;
     }
 
-    final description = json['description']?.toString() ??
+    final description = source['description']?.toString() ??
+        source['caption']?.toString() ??
+        json['description']?.toString() ??
         json['caption']?.toString() ??
         '';
 
+    final id = source['_id']?.toString() ??
+        source['id']?.toString() ??
+        json['_id']?.toString() ??
+        json['id']?.toString() ??
+        json['reelId']?.toString() ??
+        '';
+
     return ClipModel(
-      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+      id: id,
       projectId: projectId,
-      title: json['title']?.toString() ?? '',
+      title: source['title']?.toString() ?? json['title']?.toString() ?? '',
       description: description,
       videoUrl: videoUrl,
       thumbnail: thumbnail,
-      isAsset: json['isAsset'] == true,
+      isAsset: source['isAsset'] == true || json['isAsset'] == true,
       developerName: developerName.isNotEmpty ? developerName : 'User',
       developerLogo: developerLogo,
       projectName: projectName,
       projectLogo: projectLogo,
       likes: likes,
-      isLiked: json['isLiked'] == true,
+      isLiked: source['isLiked'] == true || json['isLiked'] == true,
+      isSaved: source['isSaved'] == true || json['isSaved'] == true,
       hasWhatsApp: json['hasWhatsApp'] != false, // defaults to true unless explicitly false
       locked: json['locked'] == true,
       createdAt: json['createdAt'] != null
@@ -167,6 +221,7 @@ class ClipModel {
       'projectLogo': projectLogo,
       'likes': likes,
       'isLiked': isLiked,
+      'isSaved': isSaved,
       'hasWhatsApp': hasWhatsApp,
       'locked': locked,
       'createdAt': createdAt?.toIso8601String(),
@@ -187,6 +242,7 @@ class ClipModel {
     String? projectLogo,
     int? likes,
     bool? isLiked,
+    bool? isSaved,
     bool? hasWhatsApp,
     bool? locked,
     DateTime? createdAt,
@@ -205,6 +261,7 @@ class ClipModel {
       projectLogo: projectLogo ?? this.projectLogo,
       likes: likes ?? this.likes,
       isLiked: isLiked ?? this.isLiked,
+      isSaved: isSaved ?? this.isSaved,
       hasWhatsApp: hasWhatsApp ?? this.hasWhatsApp,
       locked: locked ?? this.locked,
       createdAt: createdAt ?? this.createdAt,

@@ -200,28 +200,41 @@ class AuthApi {
     try {
       final prefs = await SharedPreferences.getInstance();
       final refreshToken = prefs.getString('refresh_token');
-      
+
       if (refreshToken == null || refreshToken.isEmpty) {
         throw Exception('No refresh token available');
       }
-      
-      final response = await _dioClient.dio.post('/auth/refresh', data: {'refreshToken': refreshToken});
+
+      final refreshDio = Dio(BaseOptions(baseUrl: _dioClient.dio.options.baseUrl));
+      final response = await refreshDio.post(
+        '/auth/refresh',
+        options: Options(headers: {'Authorization': 'Bearer $refreshToken'}),
+      );
       final data = response.data as Map<String, dynamic>;
-      
+
       final newAccessToken = data['accessToken']?.toString() ?? '';
       final newRefreshToken = data['refreshToken']?.toString() ?? '';
-      
+
       if (newAccessToken.isNotEmpty) {
         await prefs.setString('auth_token', newAccessToken);
-      }
-      if (newRefreshToken.isNotEmpty) {
-        await prefs.setString('refresh_token', newRefreshToken);
+        if (newRefreshToken.isNotEmpty) {
+          await prefs.setString('refresh_token', newRefreshToken);
+        }
+        try {
+          await ApiClient.saveTokens(
+            accessToken: newAccessToken,
+            refreshToken: newRefreshToken.isNotEmpty ? newRefreshToken : refreshToken,
+          );
+        } catch (_) {}
       }
     } on DioException catch (e) {
       // If refresh fails, clear tokens and force re-login
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('auth_token');
       await prefs.remove('refresh_token');
+      try {
+        await ApiClient.clearTokens();
+      } catch (_) {}
       throw _handleError(e);
     }
   }

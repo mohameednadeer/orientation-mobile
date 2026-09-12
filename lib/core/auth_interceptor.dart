@@ -137,7 +137,7 @@ class AuthInterceptor extends QueuedInterceptor {
     return handler.next(err);
   }
 
-  /// Dispatches POST /auth/refresh with the stored refreshToken.
+  /// Dispatches POST /auth/refresh with the stored refreshToken in Authorization header.
   Future<({bool success, bool isPermanentAuthFailure})> _performTokenRefresh() async {
     final refreshToken = await _getRefreshToken();
     if (refreshToken == null || refreshToken.isEmpty) {
@@ -146,7 +146,6 @@ class AuthInterceptor extends QueuedInterceptor {
     }
 
     try {
-      // Use a clean Dio instance to avoid recursive interceptor loops
       final refreshDio = Dio(
         BaseOptions(
           baseUrl: _dio.options.baseUrl,
@@ -159,10 +158,12 @@ class AuthInterceptor extends QueuedInterceptor {
         ),
       );
 
-      debugPrint('🔄 [Auth Refresh] Sending POST /auth/refresh...');
+      debugPrint('🔄 [Auth Refresh] Sending POST /auth/refresh with Bearer refresh token...');
       final response = await refreshDio.post(
         '/auth/refresh',
-        data: {'refreshToken': refreshToken},
+        options: Options(
+          headers: {'Authorization': 'Bearer $refreshToken'},
+        ),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
