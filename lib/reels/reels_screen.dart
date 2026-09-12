@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:screen_protector/screen_protector.dart';
 import '../widgets/app_toast.dart';
 import '../services/api/improved_clip_api.dart';
 import '../services/api/project_api.dart';
@@ -61,6 +62,10 @@ class ReelsScreenState extends State<ReelsScreen>
   @override
   void initState() {
     super.initState();
+    try {
+      ScreenProtector.preventScreenshotOff();
+      ScreenProtector.protectDataLeakageWithColorOff();
+    } catch (_) {}
     _isScreenVisible = widget.initialVisible;
     _clips = List<ClipModel>.from(widget.clips);
     _videoManager = VideoControllerManager();
@@ -463,6 +468,10 @@ class ReelsScreenState extends State<ReelsScreen>
     _clipService?.flush();
     _videoManager.dispose();
     _pageController.dispose();
+    try {
+      ScreenProtector.preventScreenshotOn();
+      ScreenProtector.protectDataLeakageWithColor(Colors.black);
+    } catch (_) {}
     super.dispose();
   }
 

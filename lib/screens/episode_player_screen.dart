@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'dart:async';
+import 'package:screen_protector/screen_protector.dart';
 import '../models/episode_model.dart';
 import '../services/api/project_api.dart';
 
@@ -33,6 +34,10 @@ class _EpisodePlayerScreenState extends State<EpisodePlayerScreen> with WidgetsB
   @override
   void initState() {
     super.initState();
+    try {
+      ScreenProtector.preventScreenshotOff();
+      ScreenProtector.protectDataLeakageWithColorOff();
+    } catch (_) {}
     WidgetsBinding.instance.addObserver(this);
     // Set landscape orientation for video
     SystemChrome.setPreferredOrientations([
@@ -251,6 +256,10 @@ class _EpisodePlayerScreenState extends State<EpisodePlayerScreen> with WidgetsB
     ]);
     _chewieController?.dispose();
     _videoController?.dispose();
+    try {
+      ScreenProtector.preventScreenshotOn();
+      ScreenProtector.protectDataLeakageWithColor(Colors.black);
+    } catch (_) {}
     super.dispose();
   }
 

@@ -7,6 +7,8 @@ import '../reels/reels_screen.dart';
 import '../services/dio_client.dart';
 import '../services/clip_service.dart';
 import '../services/cache_service.dart';
+import '../services/api/improved_clip_api.dart';
+import '../services/api/project_api.dart';
 
 /// Simple Clip API without caching - Pure network calls
 /// Best for: Real-time data, small datasets, or when server handles caching
@@ -568,12 +570,19 @@ class ClipsScreenState extends State<ClipsScreen> {
   Future<void> _loadClips({bool forceRefresh = false}) async {
     try {
       debugPrint('🎬 [ClipsScreen] Loading clips (forceRefresh: $forceRefresh)...');
-      if (!getx.Get.isRegistered<ClipService>()) {
-        debugPrint('❌ [ClipsScreen] ClipService is not registered');
-        if (mounted) setState(() => _isLoading = false);
-        return;
+      ClipService clipService;
+      if (getx.Get.isRegistered<ClipService>()) {
+        clipService = getx.Get.find<ClipService>();
+      } else {
+        clipService = ClipService(
+          clipApi: getx.Get.isRegistered<ImprovedClipApi>()
+              ? getx.Get.find<ImprovedClipApi>()
+              : ImprovedClipApi(),
+          projectApi: getx.Get.isRegistered<ProjectApi>()
+              ? getx.Get.find<ProjectApi>()
+              : ProjectApi(),
+        );
       }
-      final clipService = getx.Get.find<ClipService>();
       // Reduced from 20 -> 10 to match ReelsScreenState._pageSize and avoid
       // over-fetching metadata for reels beyond the video preload window.
       final clips = await clipService.getClips(

@@ -108,3 +108,20 @@
 -keep class com.screenprotector.** { *; }
 -dontwarn com.screenprotector.**
 
+# ExoPlayer / AndroidX Media3 (used by video_player_android)
+-keep class androidx.media3.** { *; }
+-dontwarn androidx.media3.**
+-keep class com.google.android.exoplayer2.** { *; }
+-dontwarn com.google.android.exoplayer2.**
+-keep class io.flutter.plugins.videoplayer.** { *; }
+-dontwarn io.flutter.plugins.videoplayer.**
+
+# AudioPlayers
+-keep class com.ryanheise.audioservice.** { *; }
+-keep class xyz.luan.audioplayers.** { *; }
+-dontwarn xyz.luan.audioplayers.**
+
+# Media Codecs, Decoders, and Surface callbacks
+-keep class android.media.** { *; }
+-dontwarn android.media.**
+

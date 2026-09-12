@@ -15,6 +15,7 @@ import '../models/episode_model.dart';
 import '../models/clip_model.dart';
 import '../models/pdf_file_model.dart';
 import '../services/api/project_api.dart';
+import '../services/api/improved_clip_api.dart';
 import '../services/api/auth_api.dart';
 import '../services/clip_service.dart';
 import '../services/cache_service.dart';
@@ -86,7 +87,18 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
     // Hide system status bar over video to provide an immersive viewing experience
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-    _clipService = Get.find<ClipService>();
+    if (Get.isRegistered<ClipService>()) {
+      _clipService = Get.find<ClipService>();
+    } else {
+      _clipService = ClipService(
+        clipApi: Get.isRegistered<ImprovedClipApi>()
+            ? Get.find<ImprovedClipApi>()
+            : ImprovedClipApi(),
+        projectApi: Get.isRegistered<ProjectApi>()
+            ? Get.find<ProjectApi>()
+            : ProjectApi(),
+      );
+    }
     WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(
       length: 5, // Project, Episodes, Inventory, Reels, MB
@@ -450,7 +462,19 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
         hasAccess: isSubscribed || rawDetails.hasAccess,
         episodes: rawDetails.episodes,
       );
-      final clips = results[1] as List<ClipModel>;
+      List<ClipModel> clips = results[1] as List<ClipModel>;
+      if (clips.isEmpty && rawJson != null && rawJson['reels'] is List) {
+        final rawReels = rawJson['reels'] as List;
+        clips = rawReels.map((r) {
+          final rMap = Map<String, dynamic>.from(r as Map);
+          if (rMap['projectId'] == null || rMap['projectId'].toString().isEmpty) {
+            rMap['projectId'] = widget.projectId;
+          }
+          rMap['projectName'] = project?.title ?? '';
+          rMap['projectLogo'] = project?.logo ?? project?.image ?? '';
+          return ClipModel.fromJson(rMap);
+        }).toList();
+      }
       final pdfFiles = results[2] as List<PdfFileModel>;
       final isSaved = results[3] as bool;
       final inventoryUrl = results[4] as String?;
@@ -2079,13 +2103,13 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
 
   Widget _buildReelsTab() {
     // Show only reels belonging to this project (filter out any from other projects)
-    final projectReels = widget.projectId != null
-        ? _clips
-            .where((c) =>
-                c.projectId == widget.projectId ||
-                c.projectId == _project?.id)
-            .toList()
-        : <ClipModel>[];
+    final projectReels = _clips.where((c) {
+      if (widget.projectId != null &&
+          (c.projectId == widget.projectId || c.projectId == _project?.id)) {
+        return true;
+      }
+      return c.projectId.isEmpty;
+    }).toList();
 
     if (projectReels.isEmpty) {
       return Center(

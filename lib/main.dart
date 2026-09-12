@@ -82,17 +82,30 @@ Future<void> _initializeApp() async {
 
   try {
     Get.put(AuthController(), permanent: true);
-    Get.put(ImprovedClipApi(), permanent: true);
-    Get.put(ProjectApi(), permanent: true);
+  } catch (e) {
+    if (kDebugMode) debugPrint('AuthController init error: $e');
+  }
+
+  final clipApi = ImprovedClipApi();
+  try {
+    Get.put(clipApi, permanent: true);
+  } catch (_) {}
+
+  final projectApi = ProjectApi();
+  try {
+    Get.put(projectApi, permanent: true);
+  } catch (_) {}
+
+  try {
     Get.put(
       ClipService(
-        clipApi: Get.find<ImprovedClipApi>(),
-        projectApi: Get.find<ProjectApi>(),
+        clipApi: clipApi,
+        projectApi: projectApi,
       ),
       permanent: true,
     );
   } catch (e) {
-    if (kDebugMode) debugPrint('Get.put init error (non-fatal): $e');
+    if (kDebugMode) debugPrint('ClipService init error: $e');
   }
 
   try {
