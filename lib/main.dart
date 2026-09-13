@@ -89,12 +89,16 @@ Future<void> _initializeApp() async {
   final clipApi = ImprovedClipApi();
   try {
     Get.put(clipApi, permanent: true);
-  } catch (_) {}
+  } catch (e) {
+    if (kDebugMode) debugPrint('ImprovedClipApi init error: $e');
+  }
 
   final projectApi = ProjectApi();
   try {
     Get.put(projectApi, permanent: true);
-  } catch (_) {}
+  } catch (e) {
+    if (kDebugMode) debugPrint('ProjectApi init error: $e');
+  }
 
   try {
     Get.put(

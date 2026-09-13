@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../models/project_model.dart';
 import '../models/clip_model.dart';
 import '../services/api/project_api.dart';
+import '../services/api/improved_clip_api.dart';
 import '../services/clip_service.dart';
 import '../utils/auth_helper.dart';
 import 'project_details_screen.dart';
@@ -18,7 +19,7 @@ class SavedScreen extends StatefulWidget {
 
 class _SavedScreenState extends State<SavedScreen>
     with SingleTickerProviderStateMixin {
-  final ProjectApi _projectApi = Get.find<ProjectApi>();
+  late final ProjectApi _projectApi;
   late final ClipService _clipService;
   late TabController _tabController;
 
@@ -31,7 +32,20 @@ class _SavedScreenState extends State<SavedScreen>
   @override
   void initState() {
     super.initState();
-    _clipService = Get.find<ClipService>();
+    _projectApi = Get.isRegistered<ProjectApi>()
+        ? Get.find<ProjectApi>()
+        : Get.put(ProjectApi(), permanent: true);
+    _clipService = Get.isRegistered<ClipService>()
+        ? Get.find<ClipService>()
+        : Get.put(
+            ClipService(
+              clipApi: Get.isRegistered<ImprovedClipApi>()
+                  ? Get.find<ImprovedClipApi>()
+                  : ImprovedClipApi(),
+              projectApi: _projectApi,
+            ),
+            permanent: true,
+          );
     _tabController = TabController(length: 2, vsync: this);
     _loadSavedProjects();
     _loadSavedReels();

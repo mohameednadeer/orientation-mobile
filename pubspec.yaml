@@ -1,8 +1,8 @@
-name: your_app_name
-description: A new Flutter project.
+name: orientation_app
+description: Orientation Mobile App
 publish_to: 'none'
 
-version: 1.0.3+11
+version: 1.0.5+15
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

@@ -355,7 +355,9 @@ class _SearchScreenState extends State<SearchScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const LatestForUsScreen(),
+                      builder: (context) => const ProjectsListScreen(
+                        title: 'The latest for us',
+                      ),
                     ),
                   );
                 },
@@ -366,7 +368,16 @@ class _SearchScreenState extends State<SearchScreen> {
               _buildSection(
                 context,
                 'Continue watching',
-                onViewAll: () {},
+                onViewAll: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ProjectsListScreen(
+                        title: 'Continue watching',
+                      ),
+                    ),
+                  );
+                },
                 child: _buildContinueWatchingList(),
               ),
             // Projects in New Cairo section

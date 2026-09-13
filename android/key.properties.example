@@ -1,0 +1,8 @@
+# Template for android/key.properties
+# Copy this file to android/key.properties and replace with your actual keystore credentials.
+# DO NOT commit android/key.properties or your *.jks keystore to git!
+
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=YOUR_KEY_ALIAS
+storeFile=../upload-keystore.jks

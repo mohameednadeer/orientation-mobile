@@ -50,3 +50,11 @@ app.*.map.json
 # Build artifacts
 assets/build/
 build/
+
+# Android signing & local environment secrets
+**/android/key.properties
+key.properties
+*.jks
+*.keystore
+/android/local.properties
+local.properties

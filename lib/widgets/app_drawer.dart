@@ -4,8 +4,6 @@ import '../utils/auth_helper.dart';
 import '../services/api/auth_api.dart';
 import '../screens/login_screen.dart';
 import '../screens/onboarding_screen.dart';
-import '../screens/latest_for_us_screen.dart';
-import '../screens/continue_watching_screen.dart';
 import '../screens/top_10_screen.dart';
 import '../screens/projects_list_screen.dart';
 import '../screens/developers_screen.dart';
@@ -193,7 +191,9 @@ class AppDrawerState extends State<AppDrawer> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const LatestForUsScreen(),
+                          builder: (context) => const ProjectsListScreen(
+                            title: 'The latest for us',
+                          ),
                         ),
                       );
                     },
@@ -208,7 +208,9 @@ class AppDrawerState extends State<AppDrawer> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const ContinueWatchingScreen(),
+                          builder: (context) => const ProjectsListScreen(
+                            title: 'Continue watching',
+                          ),
                         ),
                       );
                     },

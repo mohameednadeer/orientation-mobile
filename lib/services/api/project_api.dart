@@ -55,21 +55,25 @@ class ProjectApi {
   static final Map<String, Future<List<ProjectModel>>> _developerProjectsInFlight = {};
 
   /// GET /projects/:id — Fetches raw project JSON with in-flight coalescing and 5-min CacheManager TTL
-  Future<Map<String, dynamic>?> getProjectRawJson(String id, {bool forceRefresh = false}) async {
+  Future<Map<String, dynamic>?> getProjectRawJson(String id, {bool forceRefresh = false}) {
+    if (!forceRefresh && _projectRawInFlight.containsKey(id)) {
+      return _projectRawInFlight[id]!;
+    }
+
     final cacheKey = 'project_raw_json_$id';
-    if (!forceRefresh) {
-      final cached = await CacheManager.get<Map<String, dynamic>>(cacheKey);
-      if (cached != null) return cached;
-    }
-
-    if (_projectRawInFlight.containsKey(id)) {
-      return _projectRawInFlight[id];
-    }
-
-    final future = _fetchProjectRawJson(id, cacheKey).whenComplete(() {
+    final future = () async {
+      if (!forceRefresh) {
+        final cached = await CacheManager.get<Map<String, dynamic>>(cacheKey);
+        if (cached != null) return cached;
+      }
+      return _fetchProjectRawJson(id, cacheKey);
+    }().whenComplete(() {
       _projectRawInFlight.remove(id);
     });
-    _projectRawInFlight[id] = future;
+
+    if (!forceRefresh) {
+      _projectRawInFlight[id] = future;
+    }
     return future;
   }
 
@@ -1027,28 +1031,32 @@ class ProjectApi {
 
   /// GET /projects/developer?developer=ID — Get projects by developer ID
   /// OR GET /developer/me/projects — Get projects for authenticated developer (if developerId is empty)
-  Future<List<ProjectModel>> getDeveloperProjects(String developerId, {bool forceRefresh = false}) async {
+  Future<List<ProjectModel>> getDeveloperProjects(String developerId, {bool forceRefresh = false}) {
     final cacheKey = 'developer_projects_${developerId.trim()}';
 
-    if (!forceRefresh) {
-      final cached = await CacheManager.get<List<dynamic>>(cacheKey);
-      if (cached != null) {
-        print('⚡ Loaded ${cached.length} developer projects from CacheManager ($cacheKey)');
-        return cached
-            .map((e) => ProjectModel.fromJson(e as Map<String, dynamic>))
-            .toList();
-      }
-    }
-
-    if (_developerProjectsInFlight.containsKey(cacheKey)) {
+    if (!forceRefresh && _developerProjectsInFlight.containsKey(cacheKey)) {
       print('⚡ Joining existing in-flight request for $cacheKey');
       return _developerProjectsInFlight[cacheKey]!;
     }
 
-    final future = _fetchDeveloperProjects(developerId, cacheKey).whenComplete(() {
+    final future = () async {
+      if (!forceRefresh) {
+        final cached = await CacheManager.get<List<dynamic>>(cacheKey);
+        if (cached != null) {
+          print('⚡ Loaded ${cached.length} developer projects from CacheManager ($cacheKey)');
+          return cached
+              .map((e) => ProjectModel.fromJson(e as Map<String, dynamic>))
+              .toList();
+        }
+      }
+      return _fetchDeveloperProjects(developerId, cacheKey);
+    }().whenComplete(() {
       _developerProjectsInFlight.remove(cacheKey);
     });
-    _developerProjectsInFlight[cacheKey] = future;
+
+    if (!forceRefresh) {
+      _developerProjectsInFlight[cacheKey] = future;
+    }
     return future;
   }
 

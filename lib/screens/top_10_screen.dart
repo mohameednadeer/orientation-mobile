@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api/home_api.dart';
 import '../models/project_model.dart';
-import '../utils/auth_helper.dart';
 import 'project_details_screen.dart';
 
 class Top10Screen extends StatefulWidget {
@@ -51,6 +50,10 @@ class _Top10ScreenState extends State<Top10Screen> {
       MaterialPageRoute(
         builder: (context) => ProjectDetailsScreen(
           projectId: project.id,
+          heroVideoUrl: project.advertisementVideoUrl.isNotEmpty
+              ? project.advertisementVideoUrl
+              : null,
+          initialProject: project,
         ),
       ),
     );
@@ -59,56 +62,111 @@ class _Top10ScreenState extends State<Top10Screen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+      backgroundColor: const Color(0xFF0B0B0F),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(-0.85, -0.9),
+            radius: 1.2,
+            colors: [
+              Color(0x1CE50914),
+              Color(0xFF0B0B0F),
+            ],
+          ),
         ),
-        title: const Text(
-          'Top 10',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-        centerTitle: true,
-      ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(
-                color: brandRed,
-              ),
-            )
-          : _projects.isEmpty
-              ? Center(
-                  child: Text(
-                    'No projects found',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
-                      fontSize: 16,
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF181822),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.09),
+                            width: 1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
                     ),
-                  ),
-                )
-              : Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: GridView.builder(
-                    itemCount: _projects.length,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 24,
-                      crossAxisSpacing: 16,
-                      childAspectRatio: 0.75,
+                    const Expanded(
+                      child: Text(
+                        'Top 10',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
                     ),
-                    itemBuilder: (context, index) {
-                      final project = _projects[index];
-                      return Top10Card(
-                        rank: index + 1,
-                        project: project,
-                        onTap: () => _openProjectDetails(project),
-                      );
-                    },
-                  ),
+                    const SizedBox(width: 42),
+                  ],
                 ),
+              ),
+              Expanded(
+                child: _isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: brandRed,
+                        ),
+                      )
+                    : _projects.isEmpty
+                        ? Center(
+                            child: Text(
+                              'No projects found',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                fontSize: 16,
+                              ),
+                            ),
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: GridView.builder(
+                              itemCount: _projects.length,
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                mainAxisSpacing: 24,
+                                crossAxisSpacing: 16,
+                                childAspectRatio: 0.75,
+                              ),
+                              itemBuilder: (context, index) {
+                                final project = _projects[index];
+                                return Top10Card(
+                                  rank: index + 1,
+                                  project: project,
+                                  onTap: () => _openProjectDetails(project),
+                                );
+                              },
+                            ),
+                          ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -888,7 +888,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const LatestForUsScreen(),
+                    builder: (context) => const ProjectsListScreen(
+                      title: 'The latest for us',
+                    ),
                   ),
                 );
               },
@@ -939,7 +941,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const ContinueWatchingScreen(),
+                      builder: (context) => const ProjectsListScreen(
+                        title: 'Continue watching',
+                      ),
                     ),
                   );
                 },

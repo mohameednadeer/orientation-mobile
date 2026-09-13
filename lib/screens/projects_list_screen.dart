@@ -9,6 +9,7 @@ import 'episode_player_screen.dart';
 import 'project_details_screen.dart';
 import '../widgets/app_toast.dart';
 import '../utils/share_helper.dart';
+import '../services/projects_service.dart';
 
 class ProjectsListScreen extends StatefulWidget {
   final String title;
@@ -67,6 +68,14 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
         projects = await _homeApi.getTop10Projects();
       } else if (widget.title.contains('Upcoming')) {
         projects = await _homeApi.getUpcomingProjects();
+      } else if (widget.title.toLowerCase().contains('continue') || widget.title.toLowerCase().contains('watching')) {
+        projects = await _homeApi.getContinueWatching();
+      } else if (widget.title.toLowerCase().contains('free')) {
+        try {
+          projects = await ProjectsService().getFreeProjects();
+        } catch (_) {
+          projects = await _homeApi.getLatestProjects();
+        }
       } else {
         // Default: latest projects
         projects = await _homeApi.getLatestProjects();
@@ -576,6 +585,10 @@ class _ProjectsListScreenState extends State<ProjectsListScreen> {
               MaterialPageRoute(
                 builder: (context) => ProjectDetailsScreen(
                   projectId: project.id,
+                  heroVideoUrl: project.advertisementVideoUrl.isNotEmpty
+                      ? project.advertisementVideoUrl
+                      : null,
+                  initialProject: project,
                 ),
               ),
             ).then((_) => _loadProjects()); // Refresh after returning

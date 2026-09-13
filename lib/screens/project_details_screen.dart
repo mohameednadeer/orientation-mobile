@@ -489,12 +489,28 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
             if (devProject.id != project.id &&
                 !relatedProjects.any((p) => p.id == devProject.id)) {
               relatedProjects.add(devProject);
-              if (relatedProjects.length >= 3) break;
+              if (relatedProjects.length >= 10) break;
             }
           }
         } catch (e) {
           print('⚠️ Error loading developer projects: $e');
           relatedProjects = [];
+        }
+      }
+
+      // Graceful fallback: if no developer projects found, load latest projects so Project tab always has content
+      if (relatedProjects.isEmpty && project != null) {
+        try {
+          final fallbackProjects = await ProjectsService().getLatestProjects();
+          for (final p in fallbackProjects) {
+            if (p.id != project.id &&
+                !relatedProjects.any((item) => item.id == p.id)) {
+              relatedProjects.add(p);
+              if (relatedProjects.length >= 10) break;
+            }
+          }
+        } catch (e) {
+          print('⚠️ Error loading fallback latest projects: $e');
         }
       }
 
@@ -2061,11 +2077,32 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen>
       itemCount: _relatedProjects.length,
       itemBuilder: (context, index) {
         final project = _relatedProjects[index];
+        final isImageVideo = project.image.toLowerCase().endsWith('.mp4') ||
+            project.image.toLowerCase().endsWith('.mov') ||
+            project.image.toLowerCase().endsWith('.avi') ||
+            project.image.toLowerCase().endsWith('.m3u8') ||
+            project.image.toLowerCase().contains('video');
+
+        final fallbackImage = (!isImageVideo && project.image.isNotEmpty)
+            ? project.image
+            : (project.logo != null && project.logo!.isNotEmpty)
+                ? project.logo!
+                : '';
+
+        final thumbnail = (project.projectThumbnailUrl.isNotEmpty &&
+                !project.projectThumbnailUrl.toLowerCase().endsWith('.mp4'))
+            ? project.projectThumbnailUrl
+            : fallbackImage;
+
+        final isAsset = project.isAsset && thumbnail.startsWith('assets/');
+
         return _ProjectItem(
           projectName: project.title,
           location:
               project.location.isNotEmpty ? project.location : project.area,
           projectId: project.id,
+          thumbnail: thumbnail,
+          isAsset: isAsset,
           onTap: () async {
             // Pause current video (but don't dispose) before opening new project
             // This allows video to resume when returning to this screen
@@ -2685,17 +2722,24 @@ class _ProjectItem extends StatelessWidget {
   final String projectName;
   final String location;
   final String projectId;
+  final String? thumbnail;
+  final bool isAsset;
   final VoidCallback onTap;
 
   const _ProjectItem({
     required this.projectName,
     required this.location,
     required this.projectId,
+    this.thumbnail,
+    this.isAsset = false,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final hasThumbnail = thumbnail != null && thumbnail!.trim().isNotEmpty;
+    final thumb = thumbnail?.trim() ?? '';
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -2724,13 +2768,20 @@ class _ProjectItem extends StatelessWidget {
                     ],
                   ),
                 ),
-                child: const Center(
-                  child: Icon(
-                    Icons.business,
-                    color: Colors.white70,
-                    size: 28,
-                  ),
-                ),
+                child: hasThumbnail
+                    ? (isAsset || thumb.startsWith('assets/')
+                        ? Image.asset(
+                            thumb,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _buildPlaceholder(),
+                          )
+                        : CachedNetworkImage(
+                            imageUrl: thumb,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => _buildPlaceholder(),
+                            errorWidget: (_, __, ___) => _buildPlaceholder(),
+                          ))
+                    : _buildPlaceholder(),
               ),
             ),
             const SizedBox(width: 12),
@@ -2780,6 +2831,16 @@ class _ProjectItem extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder() {
+    return const Center(
+      child: Icon(
+        Icons.business,
+        color: Colors.white70,
+        size: 28,
       ),
     );
   }
@@ -3380,12 +3441,24 @@ class ProjectDetailsUIDesign extends StatelessWidget {
 class ProjectItemDesign extends StatelessWidget {
   final String projectName;
   final String location;
+  final String? thumbnail;
+  final bool isAsset;
   final VoidCallback onTap;
 
-  const ProjectItemDesign({super.key, required this.projectName, required this.location, required this.onTap});
+  const ProjectItemDesign({
+    super.key,
+    required this.projectName,
+    required this.location,
+    this.thumbnail,
+    this.isAsset = false,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final hasThumbnail = thumbnail != null && thumbnail!.trim().isNotEmpty;
+    final thumb = thumbnail?.trim() ?? '';
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -3406,7 +3479,20 @@ class ProjectItemDesign extends StatelessWidget {
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(colors: [Color(0xFF2A2A2A), Color(0xFF1A1A1A)]),
                 ),
-                child: const Center(child: Icon(Icons.business, color: Colors.white70, size: 28)),
+                child: hasThumbnail
+                    ? (isAsset || thumb.startsWith('assets/')
+                        ? Image.asset(
+                            thumb,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _buildPlaceholder(),
+                          )
+                        : CachedNetworkImage(
+                            imageUrl: thumb,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => _buildPlaceholder(),
+                            errorWidget: (_, __, ___) => _buildPlaceholder(),
+                          ))
+                    : _buildPlaceholder(),
               ),
             ),
             const SizedBox(width: 12),
@@ -3434,6 +3520,10 @@ class ProjectItemDesign extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildPlaceholder() {
+    return const Center(child: Icon(Icons.business, color: Colors.white70, size: 28));
   }
 }
 

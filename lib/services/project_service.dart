@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import '../core/api_client.dart';
 import '../models/episode_model.dart';
 import 'api/project_api.dart';
@@ -137,10 +138,30 @@ class ProjectService {
   /// Pass page and limit as strings to conform to backend DTO query validation requirements.
   static Future<List<ProjectSummary>> getFreeProjects({int page = 1, int limit = 10}) async {
     try {
-      final response = await ApiClient.dio.get(
-        '/projects/free',
-        queryParameters: {'page': page.toString(), 'limit': limit.toString()},
-      );
+      Response response;
+      try {
+        response = await ApiClient.dio.get(
+          '/projects/free',
+          queryParameters: {'page': page.toString(), 'limit': limit.toString()},
+        );
+      } on DioException catch (dioErr) {
+        if (dioErr.response?.statusCode == 400) {
+          try {
+            response = await ApiClient.dio.get(
+              '/projects/free',
+              queryParameters: {'page': page, 'limit': limit},
+            );
+          } on DioException catch (dioErr2) {
+            if (dioErr2.response?.statusCode == 400) {
+              response = await ApiClient.dio.get('/projects/free');
+            } else {
+              rethrow;
+            }
+          }
+        } else {
+          rethrow;
+        }
+      }
 
       List data;
       final responseData = response.data;

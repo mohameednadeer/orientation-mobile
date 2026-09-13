@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api/project_api.dart';
+import '../services/api/improved_clip_api.dart';
 import '../services/api/auth_api.dart';
 import '../services/clip_service.dart';
 import '../models/project_model.dart';
@@ -19,7 +20,7 @@ class AddReelScreen extends StatefulWidget {
 class _AddReelScreenState extends State<AddReelScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _projectApi = Get.find<ProjectApi>();
+  late final ProjectApi _projectApi;
   final _authApi = AuthApi();
   late final ClipService _clipService;
 
@@ -38,7 +39,20 @@ class _AddReelScreenState extends State<AddReelScreen> {
   @override
   void initState() {
     super.initState();
-    _clipService = Get.find<ClipService>();
+    _projectApi = Get.isRegistered<ProjectApi>()
+        ? Get.find<ProjectApi>()
+        : Get.put(ProjectApi(), permanent: true);
+    _clipService = Get.isRegistered<ClipService>()
+        ? Get.find<ClipService>()
+        : Get.put(
+            ClipService(
+              clipApi: Get.isRegistered<ImprovedClipApi>()
+                  ? Get.find<ImprovedClipApi>()
+                  : ImprovedClipApi(),
+              projectApi: _projectApi,
+            ),
+            permanent: true,
+          );
     _loadDeveloperProjects();
   }
 
